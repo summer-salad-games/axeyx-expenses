@@ -1,27 +1,29 @@
 # Implementation plan
 
-Status: architecture review; owner approval required before implementation. Complete and verify each milestone before continuing; update this file with results. Code and review are AI-only, per AGENTS.md.
+Status: approved by the owner on 2026-11-11 ("I validate everything"); milestone 1 locally verified; milestone 2 next. Complete and verify each milestone before continuing; update this file with results. Code and review are AI-only, per AGENTS.md.
 
 ## Planning evidence
 
 - [x] Inspect local tools and review owner-supplied Pi diagnostics (2026-11-10); current findings and accepted deployment choices are in README.md.
 - [x] Specify architecture, schema, authorization, workflows, backups and acceptance criteria in SPEC.md.
 - [x] Consolidate project documents (2026-11-11), removing superseded diagnostics, repeated requirements and planning history.
-- [ ] Obtain architecture/security/backup/milestone approval before scaffolding or dependency installation.
+- [x] Owner approved architecture/security/backup/milestones on 2026-11-11.
 
-No application, dependency lockfiles, tests or deployment scripts exist yet. Configuration evidence still needed for deployment does not block local work after approval.
+Laravel/Filament foundation, lockfiles, schema and isolated test harnesses now exist. Production runtime/configuration checks remain deferred to deployment preparation.
 
 ## 1. Foundation
 
-- [ ] Scaffold Laravel 13 inside this repository without replacing planning documents or .git; review Composer/npm hooks before execution. Keep all caches/browser binaries within project paths.
-- [ ] Resolve current stable Filament 5 >=5.11.2, compatible Livewire 4/Reverb, and framework-skeleton PHPUnit version; commit lockfiles. Recheck advisories at install time. No development branches or ignored platform requirements.
-- [ ] Resolve for the proposed production PHP 8.4 patch rather than local PHP 8.5 alone; verify platform requirements/tests on actual PHP 8.4 before deployment without changing global Herd configuration.
-- [ ] Configure SQLite/file sessions/file cache/database queue/private disks, Vite assets and one Filament panel.
-- [ ] Add schema migrations, database constraints, enums and initial factories, with no default production credentials.
-- [ ] Verify WAL/busy timeout/FULL/foreign keys on all connection types; create isolated test and E2E databases and local-only environment guards.
-- [ ] Configure PHPUnit/Livewire test harness, Playwright with project-local browser cache, Pint, npm build and dependency audits.
+- [x] Scaffold Laravel 13 inside this repository without replacing planning documents or .git; review Composer/npm hooks before execution. Keep all caches/browser binaries within project paths.
+- [x] Resolve stable Filament 5 >=5.11.2, compatible Livewire 4/Reverb and framework-skeleton PHPUnit; generate lockfiles. Recheck advisories at install time. No development branches or ignored platform requirements.
+- [x] Resolve against the conservative PHP 8.4.0 platform floor; current machine passes platform checks on PHP 8.5.12.
+- [x] Include foundation/UI source and dependency lockfiles in the milestone 1 Git checkpoint (2026-11-11).
+- [ ] Deployment gate: execute platform checks/tests on actual PHP 8.4; no such binary is installed locally and Herd/global configuration was not changed.
+- [x] Configure SQLite/file sessions/file cache/database queue/private disks, Vite assets and one Filament panel.
+- [x] Add schema migrations, database constraints, enums and initial factories, with no default production credentials.
+- [x] Verify WAL/busy timeout/FULL/foreign keys on file-backed Laravel connections and reconnects; create isolated test/E2E databases and local-only guards. Worker/backup integration checks follow their milestones.
+- [x] Configure PHPUnit/Livewire test harness, Playwright with project-local browser cache, Pint, npm build and dependency audits.
 
-Completion: clean install/migrate/build and framework smoke tests pass; platform requirements are verified; panel loads locally; lockfiles and setup docs are reproducible. Browser smoke test does not establish auth/security completion.
+Local result: schema migrated, panel/login shell loads in French, lockfiles/config/private storage and test harnesses implemented. No accounts are seeded and canAccessPanel denies every role until milestone 2. Actual PHP 8.4 execution remains a deployment gate; no authentication/security completion is claimed.
 
 ## 2. Authentication and roles
 
@@ -110,6 +112,13 @@ Completion: every definition-of-done item in SPEC.md has evidence. Do not mark p
 - Deployment-only inputs: remaining infrastructure excerpts, production identities/packages, private Drive/SMTP setup and recovery-secret storage. See README.md.
 - Production release requires separate AI review and owner-run verification; neither has occurred.
 
-## Latest verification
+## Latest verification — 2026-11-11
 
-2026-11-11: all four documents passed whitespace/fence, local link/anchor and planned shell syntax checks. Shell blocks were not executed. No application tests/builds ran; implementation has not started.
+- Stable resolution: Laravel 13.42.0, Filament 5.11.2, Livewire 4.4.8, Reverb 1.13.0, PHPUnit 12.5.43, Vite 8.3.7; exact Composer/npm dependency trees are locked.
+- Passed: migrations on disposable local SQLite; 30 PHPUnit tests/67 assertions; Playwright desktop/mobile login and centered-404 checks (4 tests); Pint; Vite build; composer validate --strict and check-platform-reqs on PHP 8.5.12; Composer/npm audits with no known advisories.
+- Regression coverage: money/role/FK constraints, integer sums, date-only storage, Unicode category uniqueness, reconnect PRAGMAs, private files, French login, fail-closed panel and test isolation.
+- Separate AI foundation review found unsafe symlink/cache isolation; fixes and refusal tests were added and the reviewer confirmed both findings resolved. This is scoped AI review, not a human audit or full-release review.
+- Initial browser harness/router/locator failures and stale WAL connections between PHPUnit applications were fixed before passing checks. Test suites now disconnect their file-backed connections after teardown.
+- Unverified: actual PHP 8.4 execution, production infrastructure and all milestone 2–9 features. No Pi access, global configuration changes, production tests or uploads occurred.
+
+UI refinement (2026-11-11): root-level login, ProxyMed branding, light-only flat colors and no top accent line. Mobile login/error pages are unboxed and full-width with larger controls; 404 remains centered. Passed 30 PHP tests, four desktop/mobile browser checks (including usable mobile form width), Pint and Vite build; screenshots visually inspected. Light-only behavior also verified at 390px/1280px with both system dark preference and a previously saved dark choice. Authentication access remains closed pending milestone 2.

@@ -1,6 +1,6 @@
 # Small Business Expense Tracker
 
-Status: proposed architecture and authoritative functional specification, pending approval. Reviewed 2026-11-11. No application exists yet.
+Status: owner-approved architecture and authoritative functional specification (2026-11-11). Reviewed 2026-11-11. Foundation implemented; remaining workflows follow PLAN.md.
 
 ## 1. Scope
 
@@ -8,7 +8,7 @@ Self-hosted expense register for one company, approximately ten fixed users, sha
 
 Excluded: registration, invitations, user-management UI, multi-company/tenancy, invoicing, banking, payments, reimbursements, approval workflows, budgets, ERP/accounting, CSV export, native apps, public APIs, external identity providers, complex RBAC/analytics/cache infrastructure, containers, Kubernetes, Redis service, separate frontend, ordinary expense email, client-side backup encryption, persistent local backup archives.
 
-## 2. Proposed runtime and architecture
+## 2. Runtime and architecture
 
 - Laravel 13, maintained Filament 5 >=5.11.2, compatible Livewire 4 and stable Reverb 1.x. Target Debian PHP 8.4 CLI/FPM; resolve stable dependencies for its selected patch, check advisories and verify on actual PHP 8.4. Commit lockfiles; never bypass platform requirements. Local runtime observations are in README.md.
 - Filament is the entire UI/authentication shell: one panel, built-in login/profile/MFA, resources/tables/forms/widgets/charts. No custom auth stack or Fortify dependency unless a demonstrated gap requires review.
@@ -26,7 +26,7 @@ All IDs are server-assigned. Required foreign keys restrict parent deletion unle
 | Table | Columns and constraints | Indexes/notes |
 | --- | --- | --- |
 | users | id; name <=120; normalized email unique <=254; password hash; role CHECK administrator/editor/viewer; is_active default true; remember_token; auth_version integer default 1; app_authentication_secret nullable TEXT; app_authentication_recovery_codes nullable TEXT; created_at/updated_at | Framework-compatible MFA fields use maintained encryption/casts; never serialize secrets. auth_version revokes old file sessions on disable/password reset/MFA reset/role change. |
-| categories | id; name unique <=100; is_active default true; created_at/updated_at | Names trimmed, case-insensitive uniqueness; disable preserves history. |
+| categories | id; name <=100; protected Unicode NFC/casefolded name_key unique; is_active default true; created_at/updated_at | Names trimmed, case-insensitive uniqueness; disable preserves history. |
 | expenses | id; expense_date DATE; amount_millimes INTEGER CHECK typeof integer and >0 and <=999999999999; category_id FK; description nullable plain text <=5000; created_by FK users; created_at/updated_at; deleted_at nullable | Index (deleted_at, expense_date), (category_id, expense_date), (created_by, expense_date). Creator immutable. Currency is constant TND, not an editable field. |
 | attachments | id; expense_id FK; path unique; original_name <=255; mime_type; size_bytes positive integer; sha256; uploaded_by FK users; created_at/updated_at | Index expense_id. Server-generated relative path on a fixed private disk; immutable bytes after creation. Original name is display metadata only. |
 | notifications | Laravel UUID id; type; notifiable_type/id; data JSON text; read_at nullable; created_at/updated_at | Framework notification indexes, plus recipient/read_at if needed. Database data follows Filament format with expense_id and required display fields. |
@@ -34,15 +34,15 @@ All IDs are server-assigned. Required foreign keys restrict parent deletion unle
 | jobs / job_batches / failed_jobs | Standard Laravel database queue migrations | One worker, bounded retries/backoff; notification/broadcast jobs idempotent. |
 | migrations | Standard Laravel migration history | No sessions/cache tables: these use files. |
 
-Proposed amount ceiling is 999999999,999 TND to bound inputs safely; document as configurable within signed 64-bit constraints. Accept ASCII digits with at most one decimal comma or point and one to three fractional digits when a separator is present; whole-number inputs are valid. Parse exactly into integer millimes, padding missing fractional places without rounding. Reject mixed/repeated separators, digit grouping, signs, exponents, zero, negatives, excessive precision, non-finite values and overflow. Display French decimal commas, exactly three fractional digits and TND: inputs 12,5 and 12.5 both display as 12,500 TND. Aggregate with integer SUM/COUNT; never SQLite TOTAL or floating decimal casts. Guard aggregate overflow instead of silently coercing. Charts carry millimes and format labels exactly.
+Amount ceiling is 999999999,999 TND to bound inputs safely; document as configurable within signed 64-bit constraints. Accept ASCII digits with at most one decimal comma or point and one to three fractional digits when a separator is present; whole-number inputs are valid. Parse exactly into integer millimes, padding missing fractional places without rounding. Reject mixed/repeated separators, digit grouping, signs, exponents, zero, negatives, excessive precision, non-finite values and overflow. Display French decimal commas, exactly three fractional digits and TND: inputs 12,5 and 12.5 both display as 12,500 TND. Aggregate with integer SUM/COUNT; never SQLite TOTAL or floating decimal casts. Guard aggregate overflow instead of silently coercing. Charts carry millimes and format labels exactly.
 
 ## 4. Authentication and CLI accounts
 
-Laravel password hashing, sessions, CSRF, regenerated login sessions, complete logout/invalidation, rate-limited password and MFA challenges. Require strong passwords (minimum 12 characters with mixed case, numbers and symbols); hidden interactive entry/confirmation for CLI passwords. No secrets in command arguments, history, logs or fixture commits. Production cookies Secure/HttpOnly/SameSite=Lax, host-only; proposed inactivity timeout 120 minutes, no persistent remember-me UI.
+Laravel password hashing, sessions, CSRF, regenerated login sessions, complete logout/invalidation, rate-limited password and MFA challenges. Require strong passwords (minimum 12 characters with mixed case, numbers and symbols); hidden interactive entry/confirmation for CLI passwords. No secrets in command arguments, history, logs or fixture commits. Production cookies Secure/HttpOnly/SameSite=Lax, host-only; inactivity timeout 120 minutes, no persistent remember-me UI.
 
 Use Filament required app-based TOTP and recovery codes. Users without enrollment can reach only enrollment/account-security/logout until setup completes. Sensitive profile changes require password/second-factor confirmation; users cannot disable required MFA and continue using the panel. Recovery codes are single-use; verify replay/concurrent use prevention with the file cache's atomic locks. Administrators reset enrollment through CLI; next login requires enrollment. No email-based MFA, email password-reset flow or email address changes through the profile. Account security provides password change and MFA/recovery management only.
 
-Proposed commands (not implemented):
+Account commands (milestone 2; not implemented):
 
 | Command | Behavior |
 | --- | --- |
@@ -84,6 +84,8 @@ All Yes entries require an active authenticated user with completed MFA. Anonymo
 Implement ExpensePolicy, CategoryPolicy, AttachmentPolicy and notification owner checks, plus explicit dashboard/security page and broadcast authorization. Filament strict authorization must reject absent policies/methods. Administrator is not a blanket global Gate bypass (notification ownership still applies).
 
 ## 6. Pages and workflows
+
+Shared panel at the site root, with login at /login; no /admin URL prefix. Visual identity follows the owner’s ProxyMed reference: turquoise/blue, coral red and dark ink, with its existing logo. Light mode only, regardless of system preference; no theme switcher. Keep the design simple: flat colors, no decorative top accent line; unboxed, full-width login/error layouts on mobile. Error 404 is French and centered on desktop/mobile.
 
 Interface language: French. Amount entry accepts decimal comma or point; display uses the decimal comma and three fractional digits.
 

@@ -4,7 +4,7 @@
 
 - All code implementation and review is AI-only. Multiple AI agents may contribute; the primary agent scopes tasks, integrates changes and verifies milestones. No human code writing/editing/review is expected.
 - Read SPEC.md before changing behavior. It owns requirements/exclusions; PLAN.md owns milestone progress/evidence; README.md owns setup, environment evidence and operations. Avoid duplicating them.
-- Architecture review remains active: do not scaffold, install dependencies or develop features until the owner explicitly approves the proposal. Initial Pi diagnostics are reviewed; remaining deployment evidence is listed in README.md.
+- Owner approved the architecture, security/backup strategy and milestones on 2026-11-11; local implementation is authorized. Initial Pi diagnostics are reviewed; remaining deployment evidence is listed in README.md.
 - Implement milestone by milestone, completing applicable verification before continuing. Discuss material scope/architecture changes with the owner.
 
 ## Implementation

@@ -1,0 +1,43 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/**/*.blade.php';
+
+.proxymed-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    text-align: left;
+}
+.proxymed-brand-mark { width: 2.75rem; height: 2.75rem; object-fit: contain; }
+.proxymed-brand-name { color: #1f7c81; font-size: 1.4rem; font-weight: 800; letter-spacing: 0.015em; line-height: 1.25; }
+.proxymed-brand-name span { color: #d23a4f; }
+.proxymed-brand-caption { color: #3f5963; font-size: 0.75rem; line-height: 1.6; }
+.fi-simple-layout { background: #f4fafb; }
+.fi-simple-main {
+    border: 1px solid #e2ecee;
+    border-radius: 0.75rem;
+    box-shadow: none;
+}
+.fi-simple-header-heading { color: #0f2a33; }
+.fi-simple-main .fi-btn.fi-color-primary {
+    background: #1f7c81;
+    color: white;
+}
+.fi-simple-main .fi-btn.fi-color-primary:hover { background: #196368; }
+@media (max-width: 639px) {
+    .fi-simple-layout { background: white; }
+    .fi-simple-layout .fi-simple-main {
+        max-width: none;
+        margin-block: 0;
+        padding: 2rem 1.25rem;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .fi-simple-header-heading { font-size: 1.25rem; line-height: 1.5; }
+    .fi-simple-main .fi-input-wrp { min-height: 2.75rem; }
+    .fi-simple-main .fi-input { font-size: 1rem; }
+    .fi-simple-main .fi-btn { min-height: 2.75rem; }
+}

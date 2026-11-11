@@ -1,8 +1,8 @@
-# Axeyx Expenses
+# ProxyMed — Dépenses
 
 Expense register for one company and approximately ten fixed users. TND currency, required TOTP MFA, shared expense visibility and administrator/editor/viewer roles.
 
-**Status:** architecture review; implementation awaits owner approval. No application or dependencies are installed.
+**Status:** approved on 2026-11-11. Local foundation implemented; authentication/MFA and business workflows are not implemented yet. Panel access is deliberately denied for every user until milestone 2.
 
 - [SPEC.md](SPEC.md): authoritative requirements, architecture, security and acceptance criteria.
 - [PLAN.md](PLAN.md): milestone progress and verification evidence.
@@ -13,12 +13,15 @@ Expense register for one company and approximately ten fixed users. TND currency
 | Setting | Value |
 | --- | --- |
 | Host | expenses.axeyx.com, HTTPS/WSS, IPv4-only external access |
-| Interface | French; decimal comma or point accepted on entry, comma and three decimal places on display |
+| Interface | French, light mode only; simple flat styling and unboxed mobile login/error pages |
+| Amount input (milestone 3) | Accept comma or point; display comma, three decimal places and TND |
 | Reporting timezone | Europe/Luxembourg, including daylight-saving changes; timestamps stored in UTC |
 | Releases | /srv/axeyx-expenses/releases with a current symlink |
 | Private state | /var/lib/axeyx-expenses: database, attachments, sessions/cache and temporary backup staging |
 | Proposed runtime | Debian PHP 8.4 CLI/FPM; Laravel 13, Filament 5 >=5.11.2, compatible Livewire 4 and stable Reverb 1.x |
 | Proposed Reverb listener | 127.0.0.1:8081; recheck availability before deployment |
+
+Brand reference: [ProxyMed](https://proxymed.pages.dev). The locally served logo mark comes from that owner-provided website; palette accents are turquoise #38B6BC, coral #E84A5F and sky blue #3B9FE0, with darker accessible control colors.
 
 ## Environment evidence
 
@@ -37,26 +40,39 @@ Observed locally or supplied by the owner on 2026-11-10; versions and package av
 
 Existing evidence does not prove future app-host log coverage, actual client-IP handling, login/MFA detection, legitimate Livewire/upload/WSS behavior or end-to-end release checks. Those remain milestone 8–9 work; completed diagnostics need not be repeated now.
 
-## Local setup and checks — after approval
+## Local setup
 
-1. Scaffold in a project-local staging directory, preserving planning documents and .git. Inspect Composer/npm hooks before enabling them.
-2. Resolve stable dependencies for the production PHP 8.4 baseline; commit lockfiles. Verify on actual PHP 8.4 before deployment despite local PHP 8.5.
-3. Keep dependency/browser caches and generated files inside the project. Do not alter Herd or install global tooling.
-4. Create local configuration, disposable SQLite/attachment data and loopback web/queue/Reverb/Vite processes. Keep .env, databases/WAL files, attachments, browser auth state and private test artifacts out of Git.
-5. Document exact setup commands once the application exists. Planned checks:
+PHP 8.4+ with the extensions listed in composer.json, Composer and a compatible Node/npm are required. Lockfiles resolve against PHP 8.4.0 as a conservative compatibility floor. Local checks ran on PHP 8.5.12; actual PHP 8.4 execution is still required before deployment.
 
 ```sh
-composer validate --strict
-composer check-platform-reqs
+COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/composer/cache" composer install --no-plugins
+npm ci --cache .cache/npm
+```
+
+On first setup only: copy .env.example to .env, run php artisan key:generate, create database/database.sqlite, then run php artisan migrate. Existing local .env and database must be preserved on subsequent setups. Never run these local instructions against production. Composer's reviewed autoload hook discovers packages and publishes Filament assets. npm lifecycle hooks are disabled in .npmrc.
+
+```sh
+npm run build
+php artisan serve --host=127.0.0.1 --port=8000
+```
+
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/), which redirects to /login. There is no /admin URL prefix. This foundation has no seeded account, registration or account provisioning command; access remains closed until milestone 2. The Reverb package/config is installed, but channels and broadcasts belong to milestone 6.
+
+## Verification
+
+```sh
+COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/composer/cache" composer validate --strict
+COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/composer/cache" composer check-platform-reqs
 php artisan test
 vendor/bin/pint --test
 npm run build
-composer audit
-npm audit
-PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" npx playwright test
+COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/composer/cache" composer audit
+npm audit --cache .cache/npm
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" npm exec --cache .cache/npm -- playwright install chromium
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" npm run test:e2e
 ```
 
-No application tests, builds or dependency resolution have run yet.
+PHPUnit uses .data/testing; Playwright starts its own loopback-only server/database under .data/e2e and refuses an existing server or production/staging configuration. Both reject database/storage symlinks and isolated cached configuration. Do not run multiple PHPUnit suites concurrently against the shared test database. These directories, caches, private files, .env and test artifacts are ignored by Git. Current results are in PLAN.md.
 
 ## Deployment preparation — owner-executed
 
@@ -72,7 +88,7 @@ The owner must verify IPv4 HTTPS/WSS, intended IPv6 rejection, MFA/roles/private
 
 ## Accounts, backups and recovery
 
-Account command contracts are in [SPEC §4](SPEC.md#4-authentication-and-cli-accounts); they are not implemented. Passwords use hidden prompts. Private attachments must never use a public storage symlink or be manually purged.
+Account command contracts are in [SPEC §4](SPEC.md#4-authentication-and-cli-accounts); they belong to milestone 2 and are not implemented. Passwords use hidden prompts. Private attachments must never use a public storage symlink or be manually purged.
 
 The backup/restore algorithm is in [SPEC §11](SPEC.md#11-google-drive-backup-and-failure-alerts). Confirmed schedule/retention: daily 03:15 Europe/Luxembourg, latest 30 successful backups, Google Drive only, no additional encryption and no persistent local archives.
 
@@ -82,7 +98,7 @@ Before enabling the schedule, verify real upload/check/retention, a received fai
 
 ## References
 
-Reference review: 2026-11-10. Recheck compatibility and advisories at dependency resolution; these links are not evidence of a successful install.
+Reference review: 2026-11-11; dependency resolution and audits recorded in PLAN.md. Recheck compatibility and advisories at dependency resolution; these links are not evidence of a successful install.
 
 - [Laravel releases](https://github.com/laravel/docs/blob/13.x/releases.md), [Debian PHP 8.4 FPM](https://packages.debian.org/trixie/php8.4-fpm).
 - [Filament installation](https://filamentphp.com/docs/5.x/introduction/installation), [MFA](https://filamentphp.com/docs/5.x/users/multi-factor-authentication), [security](https://filamentphp.com/docs/5.x/advanced/security), [MFA advisory](https://github.com/filamentphp/filament/security/advisories/GHSA-52xp-w8hr-xv3c), [scope advisory](https://github.com/filamentphp/filament/security/advisories/GHSA-6p72-cx74-63f5).
