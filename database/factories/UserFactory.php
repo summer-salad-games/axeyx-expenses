@@ -24,6 +24,8 @@ class UserFactory extends Factory
             'role' => Role::Viewer,
             'is_active' => true,
             'auth_version' => 1,
+            'must_change_password' => false,
+            'onboarding_completed_at' => now(),
         ];
     }
 

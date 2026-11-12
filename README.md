@@ -2,7 +2,7 @@
 
 Expense register for one company and approximately ten fixed users. TND currency, required TOTP MFA, shared expense visibility and administrator/editor/viewer roles.
 
-**Status:** approved on 2026-11-11. Local foundation implemented; authentication/MFA and business workflows are not implemented yet. Panel access is deliberately denied for every user until milestone 2.
+**Status:** foundation and authentication/roles implemented locally. Required MFA, account commands and permission policies are available. Expense/category screens and other business workflows follow in the next milestones; this is not a production release. Verification is recorded in PLAN.md.
 
 - [SPEC.md](SPEC.md): authoritative requirements, architecture, security and acceptance criteria.
 - [PLAN.md](PLAN.md): milestone progress and verification evidence.
@@ -42,7 +42,7 @@ Existing evidence does not prove future app-host log coverage, actual client-IP 
 
 ## Local setup
 
-PHP 8.4+ with the extensions listed in composer.json, Composer and a compatible Node/npm are required. Lockfiles resolve against PHP 8.4.0 as a conservative compatibility floor. Local checks ran on PHP 8.5.12; actual PHP 8.4 execution is still required before deployment.
+PHP 8.4+ with Argon2id support and the extensions listed in composer.json, Composer and a compatible Node/npm are required. Lockfiles resolve against PHP 8.4.0 as a conservative compatibility floor. Local checks ran on PHP 8.5.12; actual PHP 8.4 execution is still required before deployment.
 
 ```sh
 COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/composer/cache" composer install --no-plugins
@@ -53,10 +53,44 @@ On first setup only: copy .env.example to .env, run php artisan key:generate, cr
 
 ```sh
 npm run build
-php artisan serve --host=127.0.0.1 --port=8000
+npm run dev:server
 ```
 
-Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/), which redirects to /login. There is no /admin URL prefix. This foundation has no seeded account, registration or account provisioning command; access remains closed until milestone 2. The Reverb package/config is installed, but channels and broadcasts belong to milestone 6.
+`dev:server` starts the local PHP server with HTTP requests and application logs in the same terminal, and keeps a copy of application logs in `storage/logs/laravel.log`. Its logging overrides apply only to that process. Stop with Ctrl+C; restart after changing `.env` because this command preserves its environment with `--no-reload`. PHP source changes apply on subsequent requests. `npm run dev` runs the Vite asset watcher separately when needed.
+
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/), which redirects to /login. There is no /admin URL prefix or registration. Create your local account from another terminal in this project:
+
+```sh
+php artisan accounts:create
+```
+
+Enter name, email, role and a temporary password when prompted. Password entry/confirmation is hidden; use at least 12 characters with uppercase/lowercase letters, a number and a symbol. No default account/password is seeded.
+
+Log in with the temporary password. The dedicated onboarding flow has three steps and a shared progress indicator:
+
+1. `/setup/mfa`: scan the displayed QR code or enter the secret in your authenticator, enter its current code, then privately save the recovery codes before activating MFA. Initial enrollment does not ask for the temporary password again. Enrollment after an MFA reset still requires your current password. If the setup code expires, return to the previous step and enter a fresh code.
+2. `/setup/password`: choose a different password of at least 12 characters, confirm it and enter your current temporary password. Spaces and accents are accepted; uppercase letters, numbers and symbols are optional.
+3. `/setup/complete`: **Tout est prêt !** confirms setup; click **Accéder à l’application** to finish.
+
+The setup header stays pinned while scrolling and provides **Se déconnecter** instead of a profile menu. You can sign out between completed steps and resume the first unfinished step after logging back in; an enrolled account still requires normal MFA verification. `/setup` redirects to the next unfinished step, or the dashboard when complete. Dashboard access stays blocked until final confirmation. The old `/multi-factor-authentication/set-up` URL redirects through `/setup`.
+
+The dashboard currently contains only the account shell. **Paramètres du compte** is a permanent navigation entry with a gear icon; the top-right user menu retains logout without duplicating this link. The main application header stays pinned while scrolling. It is highlighted when its page is open, including in the mobile navigation drawer; the page title uses the same label. Its separate password/MFA sections change the password or regenerate recovery codes after confirmation; required MFA cannot be disabled. Log out and back in to check the TOTP challenge. A recovery code can replace TOTP once; store codes securely and never paste them into chat.
+
+Sessions expire after 120 minutes without server requests (`SESSION_LIFETIME=120`). Expiry is enforced on the next request; an idle open tab is not immediately cleared. Background requests can renew the session. Persistent “remember me” login is disabled.
+
+After updating an existing local checkout, run `php artisan migrate` to add onboarding state without resetting data. Existing accounts with configured MFA and a chosen password retain completion; unfinished accounts resume setup.
+
+The Reverb package/config is installed, but live channels and socket disconnection belong to milestone 6.
+
+To start over with an empty local database, stop the development server and run:
+
+```sh
+npm run db:reset
+php artisan accounts:create
+npm run dev:server
+```
+
+`db:reset` runs `php artisan migrate:fresh && php artisan optimize:clear`: it permanently deletes all database records, recreates the tables and clears cached framework state. Use it only for local development. Uploaded files and `.env` are retained. Afterward, use a fresh private browser window for new-account onboarding.
 
 ## Verification
 
@@ -72,7 +106,15 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" npm exec --cache .cache/npm
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" npm run test:e2e
 ```
 
-PHPUnit uses .data/testing; Playwright starts its own loopback-only server/database under .data/e2e and refuses an existing server or production/staging configuration. Both reject database/storage symlinks and isolated cached configuration. Do not run multiple PHPUnit suites concurrently against the shared test database. These directories, caches, private files, .env and test artifacts are ignored by Git. Current results are in PLAN.md.
+PHPUnit uses .data/testing; Playwright resets its own disposable database, generates random test accounts and starts a loopback-only server under .data/e2e. It refuses an existing server or production/staging configuration. Both reject database/storage symlinks and isolated cached configuration. Do not run multiple PHPUnit suites concurrently against the shared test database. These directories, caches, private files, .env and test artifacts are ignored by Git. Test-only password hashing is deliberately cheaper than normal runtime hashing. Current results are in PLAN.md.
+
+Local 405 diagnostics are written to `storage/logs/laravel.log` when `APP_ENV=local`: method, path, allowed methods, routing message and whether the request retained the Livewire transport marker. Query strings, cookies and request bodies are excluded. The file may not exist until an event is logged. To inspect recent entries:
+
+```sh
+tail -n 30 storage/logs/laravel.log
+```
+
+After an MFA setup error, refresh the page before retrying. Completed security steps are retained and the app resumes the first unfinished step. Completing onboarding does not require resetting the database.
 
 ## Deployment preparation — owner-executed
 
@@ -88,7 +130,20 @@ The owner must verify IPv4 HTTPS/WSS, intended IPv6 rejection, MFA/roles/private
 
 ## Accounts, backups and recovery
 
-Account command contracts are in [SPEC §4](SPEC.md#4-authentication-and-cli-accounts); they belong to milestone 2 and are not implemented. Passwords use hidden prompts. Private attachments must never use a public storage symlink or be manually purged.
+Npm shortcuts for account commands (`USER` is an ID or email; `ROLE` is `administrator`, `editor` or `viewer`):
+
+```bash
+npm run accounts:create
+npm run accounts:list
+npm run accounts:role -- USER ROLE
+npm run accounts:disable -- USER
+npm run accounts:password -- USER
+npm run accounts:mfa-reset -- USER
+```
+
+The six account commands in [SPEC §4](SPEC.md#4-authentication-and-cli-accounts) are implemented. Run them from the project directory. `php artisan accounts:list` shows IDs and enrollment status; use an ID or email for USER in the other commands. Passwords use hidden prompts, and MFA reset asks for confirmation. Role changes, disabling, password changes and MFA resets revoke existing sessions on their next request. `accounts:password` sets a temporary password: after the next MFA login, the user must choose a different password and finish setup. It retains existing MFA enrollment; `accounts:mfa-reset` repeats MFA setup and final confirmation without repeating an already-completed password step. A password change or recovery-code regeneration in **Paramètres du compte** preserves that browser's session and revokes the others. Account changes are audited; password/MFA failures log only factor, internal user ID when known and IP. Live socket revocation will be completed with Reverb in milestone 6.
+
+Private attachments must never use a public storage symlink or be manually purged.
 
 The backup/restore algorithm is in [SPEC §11](SPEC.md#11-google-drive-backup-and-failure-alerts). Confirmed schedule/retention: daily 03:15 Europe/Luxembourg, latest 30 successful backups, Google Drive only, no additional encryption and no persistent local archives.
 

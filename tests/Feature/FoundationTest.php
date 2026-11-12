@@ -282,11 +282,11 @@ class FoundationTest extends TestCase
     }
 
     #[DataProvider('roles')]
-    public function test_panel_remains_closed_to_every_role_until_authentication_milestone(string $role): void
+    public function test_panel_requires_a_validated_session_for_every_role(string $role): void
     {
         $user = User::factory()->create(['role' => $role]);
 
-        $this->actingAs($user)->get('/')->assertForbidden();
+        $this->actingAs($user)->get('/')->assertRedirect('/login');
     }
 
     /** @return array{string, string, Application} */

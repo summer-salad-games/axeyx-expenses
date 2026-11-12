@@ -21,12 +21,56 @@
     box-shadow: none;
 }
 .fi-simple-header-heading { color: #0f2a33; }
-.fi-simple-main .fi-btn.fi-color-primary {
+.fi-btn.fi-color-primary {
     background: #1f7c81;
     color: white;
 }
-.fi-simple-main .fi-btn.fi-color-primary:hover { background: #196368; }
+.fi-btn.fi-color-primary:hover { background: #196368; }
+.setup-flow { min-height: 100svh; background: #f4fafb; padding-bottom: 3rem; }
+.setup-header { position: sticky; top: 0; z-index: 30; background: #f4fafb; max-width: 68rem; margin: auto; padding: 1.25rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.setup-signout { color: #3f5963; font-size: 0.875rem; text-decoration: underline; text-underline-offset: 0.25rem; }
+.setup-signout:hover { color: #1f7c81; }
+.setup-main { max-width: 44rem; margin: 1.5rem auto 0; padding: 0 1.25rem; }
+.setup-steps { margin-bottom: 1.75rem; }
+.setup-steps ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: relative; gap: 0.5rem; }
+.setup-steps ol::before { content: ''; position: absolute; top: 1.25rem; left: 16.66%; right: 16.66%; border-top: 1px solid #d8e4e7; }
+.setup-step { position: relative; text-align: center; color: #657780; font-size: 0.8125rem; }
+.setup-step-icon { display: flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid #d8e4e7; border-radius: 50%; background: #f4fafb; margin: 0 auto 0.5rem; }
+.setup-step-icon svg { width: 1.25rem; height: 1.25rem; }
+.setup-step.is-current { color: #155e63; font-weight: 600; }
+.setup-step.is-current .setup-step-icon { background: #1f7c81; color: white; border-color: #1f7c81; }
+.setup-step.is-done .setup-step-icon { background: #e3f4f4; color: #1f7c81; border-color: #80c9cc; }
+.setup-card { background: white; padding: 2rem; border: 1px solid #e2ecee; border-radius: 0.875rem; }
+.setup-card-heading { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.75rem; }
+.setup-card-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: #e3f4f4; color: #1f7c81; }
+.setup-card-icon svg { width: 1.5rem; height: 1.5rem; }
+.setup-card-heading h1 { font-size: 1.35rem; font-weight: 650; line-height: 1.4; color: #0f2a33; }
+.setup-card-heading p { margin-top: 0.5rem; color: #657780; font-size: 0.925rem; line-height: 1.6; }
+.setup-autofill-username { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.setup-flow .fi-one-time-code-input-digit:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px white inset; -webkit-text-fill-color: #0f2a33; }
+.setup-flow .fi-one-time-code-input-digit:focus-visible { outline: 2px solid #1f7c81; outline-offset: 2px; }
+.setup-checklist { display: grid; gap: 0.875rem; color: #3f5963; font-size: 0.925rem; margin-bottom: 2rem; }
+.setup-checklist li { display: flex; align-items: center; gap: 0.65rem; }
+.setup-checklist svg { width: 1.25rem; height: 1.25rem; color: #1f7c81; flex: none; }
+@media (max-width: 1023px) {
+    .fi-topbar .fi-topbar-start { display: flex; min-width: 0; }
+    .fi-topbar .proxymed-brand { gap: 0.4rem; }
+    .fi-topbar .proxymed-brand-mark { width: 2rem; height: 2rem; }
+    .fi-topbar .proxymed-brand-name { font-size: 1.1rem; }
+    .fi-topbar .proxymed-brand-caption { font-size: 0.625rem; }
+}
 @media (max-width: 639px) {
+    .setup-flow { background: white; }
+    .setup-header { padding: 1rem 1.25rem; background: white; }
+    .setup-header .proxymed-brand-mark { width: 2rem; height: 2rem; }
+    .setup-header .proxymed-brand-name { font-size: 1.1rem; }
+    .setup-header .proxymed-brand-caption { font-size: 0.625rem; }
+    .setup-signout { font-size: 0.8125rem; }
+    .setup-main { margin-top: 1rem; }
+    .setup-card { border: 0; border-radius: 0; padding: 1rem 0; }
+    .setup-card-heading { gap: 0.75rem; }
+    .setup-card-heading h1 { font-size: 1.2rem; }
+    .setup-step { font-size: 0.75rem; }
     .fi-simple-layout { background: white; }
     .fi-simple-layout .fi-simple-main {
         max-width: none;

@@ -1,6 +1,6 @@
 # Small Business Expense Tracker
 
-Status: owner-approved architecture and authoritative functional specification (2026-11-11). Reviewed 2026-11-11. Foundation implemented; remaining workflows follow PLAN.md.
+Status: owner-approved architecture and authoritative functional specification (2026-11-11). Reviewed 2026-11-11. Foundation and authentication/roles implemented locally; remaining workflows follow PLAN.md.
 
 ## 1. Scope
 
@@ -25,7 +25,7 @@ All IDs are server-assigned. Required foreign keys restrict parent deletion unle
 
 | Table | Columns and constraints | Indexes/notes |
 | --- | --- | --- |
-| users | id; name <=120; normalized email unique <=254; password hash; role CHECK administrator/editor/viewer; is_active default true; remember_token; auth_version integer default 1; app_authentication_secret nullable TEXT; app_authentication_recovery_codes nullable TEXT; created_at/updated_at | Framework-compatible MFA fields use maintained encryption/casts; never serialize secrets. auth_version revokes old file sessions on disable/password reset/MFA reset/role change. |
+| users | id; name <=120; normalized email unique <=254; password hash; role CHECK administrator/editor/viewer; is_active default true; must_change_password boolean default true; onboarding_completed_at nullable timestamp; remember_token; auth_version integer default 1; app_authentication_secret nullable TEXT; app_authentication_recovery_codes nullable TEXT; created_at/updated_at | Framework-compatible MFA fields use maintained encryption/casts; never serialize secrets. auth_version revokes old file sessions on disable/password reset/MFA reset/role change. Password/completion onboarding state is server-owned. |
 | categories | id; name <=100; protected Unicode NFC/casefolded name_key unique; is_active default true; created_at/updated_at | Names trimmed, case-insensitive uniqueness; disable preserves history. |
 | expenses | id; expense_date DATE; amount_millimes INTEGER CHECK typeof integer and >0 and <=999999999999; category_id FK; description nullable plain text <=5000; created_by FK users; created_at/updated_at; deleted_at nullable | Index (deleted_at, expense_date), (category_id, expense_date), (created_by, expense_date). Creator immutable. Currency is constant TND, not an editable field. |
 | attachments | id; expense_id FK; path unique; original_name <=255; mime_type; size_bytes positive integer; sha256; uploaded_by FK users; created_at/updated_at | Index expense_id. Server-generated relative path on a fixed private disk; immutable bytes after creation. Original name is display metadata only. |
@@ -38,26 +38,32 @@ Amount ceiling is 999999999,999 TND to bound inputs safely; document as configur
 
 ## 4. Authentication and CLI accounts
 
-Laravel password hashing, sessions, CSRF, regenerated login sessions, complete logout/invalidation, rate-limited password and MFA challenges. Require strong passwords (minimum 12 characters with mixed case, numbers and symbols); hidden interactive entry/confirmation for CLI passwords. No secrets in command arguments, history, logs or fixture commits. Production cookies Secure/HttpOnly/SameSite=Lax, host-only; inactivity timeout 120 minutes, no persistent remember-me UI.
+Laravel Argon2id password hashing, sessions, CSRF, regenerated login sessions, complete logout/invalidation, rate-limited password and MFA challenges. Require passwords of at least 12 characters; allow passphrases, spaces and Unicode, without mandatory uppercase/lowercase, numbers or symbols; hidden interactive entry/confirmation for CLI passwords. No secrets in command arguments, history, logs or fixture commits. Production cookies Secure/HttpOnly/SameSite=Lax, host-only; inactivity timeout 120 minutes, no persistent remember-me UI.
 
-Use Filament required app-based TOTP and recovery codes. Users without enrollment can reach only enrollment/account-security/logout until setup completes. Sensitive profile changes require password/second-factor confirmation; users cannot disable required MFA and continue using the panel. Recovery codes are single-use; verify replay/concurrent use prevention with the file cache's atomic locks. Administrators reset enrollment through CLI; next login requires enrollment. No email-based MFA, email password-reset flow or email address changes through the profile. Account security provides password change and MFA/recovery management only.
+Page GET/HEAD requests retaining a Livewire update header after an HTTP redirect must render as ordinary pages. Component updates remain POST requests with transport-header, JSON, CSRF and persistent authorization checks intact.
 
-Account commands (milestone 2; not implemented):
+Use Filament required app-based TOTP and recovery codes. Users without enrollment can reach only MFA setup and logout. Sensitive profile changes require password/second-factor confirmation; users cannot disable required MFA and continue using the panel. Recovery codes are single-use; verify replay/concurrent use prevention with the file cache's atomic locks. Administrators reset enrollment through CLI; next login requires enrollment. No email-based MFA, email password-reset flow or email address changes through the profile. Account security provides password change and MFA/recovery management only.
+
+First-login onboarding is mandatory and visually separate from the application: `/setup/mfa` enrolls MFA, `/setup/password` chooses and confirms a strong password different from the temporary one while confirming current credentials, and `/setup/complete` displays “Tout est prêt” with an explicit application-entry button. `/setup` redirects to the first unfinished step, or the dashboard when complete. Initial MFA enrollment verifies the authenticator code without repeating the temporary password; later enrollment after an MFA reset retains password confirmation, including when password selection is still pending. Code validation, attempt limits and replay prevention remain mandatory. All steps share a centered setup card and a three-icon progress indicator (MFA shield, password key, completion rocket). Show only branding and CSRF-protected sign-out, without profile menu or app navigation. Keep OTP autofill styling neutral and provide an explicit username hint for password managers where a password field is present.
+
+Persist completed steps across sign-out/sign-in; resume the first unfinished step after normal authentication/MFA. App data stays inaccessible until MFA, password choice and final confirmation are complete. Only a successful user password change clears its requirement, atomically with audit/session revocation; the confirmed browser stays authenticated. Final confirmation stamps `onboarding_completed_at` and audits idempotently. Existing fully configured accounts are backfilled as complete; pending accounts remain pending. CLI password resets set a temporary password and clear final completion. MFA reset clears MFA and final completion while preserving an already chosen password. No new account configuration fields are part of the rocket step.
+
+Account commands (implemented in milestone 2; socket revocation follows in milestone 6):
 
 | Command | Behavior |
 | --- | --- |
-| php artisan accounts:create | Prompt name/email/role and hidden password twice; default viewer; audit. |
+| php artisan accounts:create | Prompt name/email/role and hidden temporary password twice; default viewer; require MFA and user-chosen password; audit. |
 | php artisan accounts:list | Show ID, name, email, role, active status and enrollment status only. |
 | php artisan accounts:role USER ROLE | Validate one of the three roles; audit and revoke old sessions/sockets. |
 | php artisan accounts:disable USER | Set inactive, rotate remember token/auth_version, revoke sockets; audit. |
-| php artisan accounts:password USER | Hidden password prompt/confirmation, hash, revoke old sessions; audit. |
+| php artisan accounts:password USER | Hidden temporary password prompt/confirmation, hash, require user-chosen replacement after next MFA login, revoke old sessions; audit. |
 | php artisan accounts:mfa-reset USER | Explicit interactive confirmation; clear enrollment/recovery state, revoke sessions/sockets; audit. |
 
 USER is a stable ID or email, never a password. No public registration, invitations or user-management resource. No account hard deletion. No CLI command accepts a plaintext password option. Account disabling is rechecked on every HTTP/Livewire/download/channel-auth request. Socket authorization alone does not revoke an already open connection: test active disconnection, with a Reverb process restart as the simple ten-user fallback for administrative revocation; deny reauthorization on reconnect.
 
 ## 5. Complete authorization matrix
 
-All Yes entries require an active authenticated user with completed MFA. Anonymous, inactive, and enrollment-only sessions are denied application data. Policies apply per request/action, including crafted Livewire state and bulk actions; do not rely on button visibility.
+All application-data Yes entries require an active authenticated user with completed MFA, password choice and final onboarding confirmation. Anonymous, inactive, and incomplete-onboarding sessions are denied application data. Onboarding sessions can only reach their required step or log out; recovery regeneration requires completed onboarding. Policies apply per request/action, including crafted Livewire state and bulk actions; do not rely on button visibility.
 
 | Action | Administrator | Editor | Viewer |
 | --- | --- | --- | --- |
@@ -85,20 +91,20 @@ Implement ExpensePolicy, CategoryPolicy, AttachmentPolicy and notification owner
 
 ## 6. Pages and workflows
 
-Shared panel at the site root, with login at /login; no /admin URL prefix. Visual identity follows the owner’s ProxyMed reference: turquoise/blue, coral red and dark ink, with its existing logo. Light mode only, regardless of system preference; no theme switcher. Keep the design simple: flat colors, no decorative top accent line; unboxed, full-width login/error layouts on mobile. Error 404 is French and centered on desktop/mobile.
+Shared panel at the site root, with login at /login; no /admin URL prefix. Visual identity follows the owner’s ProxyMed reference: turquoise/blue, coral red and dark ink, with its existing logo. Light mode only, regardless of system preference; no theme switcher. Keep the design simple: flat colors, no decorative top accent line; unboxed, full-width login/error layouts on mobile. Keep the main application header and setup branding/sign-out header pinned at the top while scrolling. Error 404 is French and centered on desktop/mobile.
 
 Interface language: French. Amount entry accepts decimal comma or point; display uses the decimal comma and three fractional digits.
 
 | Page | Required behavior |
 | --- | --- |
-| Login / MFA enrollment and challenge | Built-in Filament, rate limits, required TOTP, single-use recovery. |
+| Login / onboarding / MFA challenge | Built-in Filament login/challenge and native MFA setup validation; dedicated resumable three-step `/setup` UI, rate limits, required TOTP, single-use recovery and mandatory user-chosen password before application access. |
 | Dashboard | Company-wide totals/count, monthly trend, category totals, creator totals; one active date-range state. |
 | Expenses | Shared paginated sortable list; search description/category/creator; date/category/creator filters; exact TND; policy-gated actions. |
 | Expense details | Date, amount, category, description, creator, timestamps and authenticated image previews/PDF links. |
 | Create/Edit expense | Filament form, validation errors, authorized attachment management, server-owned fields, confirmation before deletion/removal. |
 | Notifications | Dedicated newest-first section, unread badge, read/unread state, mark read/unread and all read, related expense link. |
 | Categories | Administrator only: create, edit, disable; never delete historical associations. |
-| Account security | Own password and required MFA/recovery management; no account/role administration. |
+| Paramètres du compte | Available after onboarding. Permanent gear-icon navigation entry with active-page highlighting on desktop/mobile; matching page title. Keep this link out of the top-right user menu; retain logout there. Regular app layout with separate password/MFA sections and stable visible password fields; own password and required MFA/recovery management; no account/role administration. |
 
 Expense fields: required date (future dates allowed unless business rules change), positive exact TND, one category, optional description. Create uses only active categories. Edit can keep its existing disabled category, but cannot switch to a different disabled category. Validate active category in the write transaction to handle concurrent disabling. Creator comes from the authenticated user and cannot be changed.
 
