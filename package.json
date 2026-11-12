@@ -6,7 +6,7 @@
         "build": "vite build",
         "dev": "vite",
         "dev:server": "LOG_CHANNEL=stack LOG_STACK=single,stderr LOG_LEVEL=debug php artisan serve --no-reload --host=127.0.0.1 --port=8000",
-        "db:reset": "php artisan migrate:fresh && php artisan optimize:clear",
+        "db:reset": "php artisan migrate:fresh --seed && php artisan optimize:clear",
         "accounts:create": "php artisan accounts:create",
         "accounts:list": "php artisan accounts:list",
         "accounts:role": "php artisan accounts:role",

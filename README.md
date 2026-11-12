@@ -2,7 +2,7 @@
 
 Expense register for one company and approximately ten fixed users. TND currency, required TOTP MFA, shared expense visibility and administrator/editor/viewer roles.
 
-**Status:** foundation and authentication/roles implemented locally. Required MFA, account commands and permission policies are available. Expense/category screens and other business workflows follow in the next milestones; this is not a production release. Verification is recorded in PLAN.md.
+**Status:** milestones 1–3 are implemented and verified locally: foundation, authentication/roles, expenses and categories. Attachments, statistics, notifications, real time, backups and production deployment remain later milestones. Verification is recorded in PLAN.md.
 
 - [SPEC.md](SPEC.md): authoritative requirements, architecture, security and acceptance criteria.
 - [PLAN.md](PLAN.md): milestone progress and verification evidence.
@@ -49,7 +49,7 @@ COMPOSER_HOME="$PWD/.cache/composer/home" COMPOSER_CACHE_DIR="$PWD/.cache/compos
 npm ci --cache .cache/npm
 ```
 
-On first setup only: copy .env.example to .env, run php artisan key:generate, create database/database.sqlite, then run php artisan migrate. Existing local .env and database must be preserved on subsequent setups. Never run these local instructions against production. Composer's reviewed autoload hook discovers packages and publishes Filament assets. npm lifecycle hooks are disabled in .npmrc.
+On first setup only: copy .env.example to .env, run php artisan key:generate, create database/database.sqlite, then run php artisan migrate --seed. Existing local .env and database must be preserved on subsequent setups. Never run these local instructions against production. Composer's reviewed autoload hook discovers packages and publishes Filament assets. npm lifecycle hooks are disabled in .npmrc.
 
 ```sh
 npm run build
@@ -64,7 +64,7 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/), which redirects to /login
 php artisan accounts:create
 ```
 
-Enter name, email, role and a temporary password when prompted. Password entry/confirmation is hidden; use at least 12 characters with uppercase/lowercase letters, a number and a symbol. No default account/password is seeded.
+Enter name, email, role and a temporary password when prompted. Password entry/confirmation is hidden; use at least 12 characters. Spaces and accents are allowed; uppercase letters, numbers and symbols are optional. No default account/password is seeded.
 
 Log in with the temporary password. The dedicated onboarding flow has three steps and a shared progress indicator:
 
@@ -90,7 +90,25 @@ php artisan accounts:create
 npm run dev:server
 ```
 
-`db:reset` runs `php artisan migrate:fresh && php artisan optimize:clear`: it permanently deletes all database records, recreates the tables and clears cached framework state. Use it only for local development. Uploaded files and `.env` are retained. Afterward, use a fresh private browser window for new-account onboarding.
+`db:reset` runs `php artisan migrate:fresh --seed && php artisan optimize:clear`: it permanently deletes all database records, recreates the tables, restores default expense categories and clears cached framework state. It creates no user accounts. Use it only for local development. Uploaded files and `.env` are retained. Afterward, use a fresh private browser window for new-account onboarding.
+
+## Expenses and categories
+
+After login/onboarding, use **Dépenses** in the left menu (`/expenses`). All roles see the shared register and details. Administrators and editors can create expenses; editors can change/delete only their own, while administrators can change/delete any expense. Viewers have read-only access. Mobile rows stack vertically; search, date/category/creator filters, sorting and pagination are available. Every dropdown in the expense/category filter popups includes a search box, including category status.
+
+Twenty default French categories are provided for ProxyMed’s respiratory diagnostic centre, covering medical equipment/maintenance/consumables, diagnostic products/gases and general operating expenses. Administrators manage them or add more under **Catégories** (`/categories`). Category names are unique ignoring case and equivalent Unicode spellings. Editing a category can deactivate/reactivate it; deactivation preserves history and prevents new selections. An existing expense may retain its own deactivated category. There is no category deletion interface.
+
+An expense requires a date (future dates are allowed), category and positive amount; description is optional. The optional Description table column shows up to 20 characters followed by `...`; the full text remains in forms and details. The amount input selects its text on focus, blocks letters/signs/extra separators and a fourth fractional digit while typing, and accepts comma or point. Both `12,5` and `12.5` become `12,500` when you leave the field, and display as `12,500 TND` after saving. A leading decimal separator automatically gets a zero. Malformed pastes are rejected in full, without stripping/truncating them. **Créer & Ajouter un autre** saves the expense and resets the amount to empty for the next entry. Values have at most three decimal places and are stored as integer millimes. The default maximum is `999 999 999,999 TND`; `config/expenses.php` can lower it within the database ceiling. Expense deletion requires confirmation and hides the record while retaining its history and attachment records.
+
+To add missing defaults to an existing database without resetting it, run:
+
+```sh
+php artisan db:seed --class=DefaultCategorySeeder
+```
+
+Seeding matches normalized category names and leaves existing names, active/disabled status and custom categories unchanged. Only newly created categories receive an operator audit event. No accounts or expenses are seeded. Default categories can be renamed/deactivated in the UI; rerunning the seeder adds any default names that are missing.
+
+Milestone 3 uses the existing schema and adds no migration. A database reset is not required to add the defaults. Attachments arrive in milestone 4; dashboard statistics in milestone 5; notifications and real-time updates in milestone 6. For now, another browser refreshes the register to see changes.
 
 ## Verification
 

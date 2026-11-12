@@ -10,6 +10,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Accounts are explicitly provisioned through hidden CLI prompts in milestone 2.
+        // Accounts are explicitly provisioned through hidden CLI prompts.
+        $this->call(DefaultCategorySeeder::class);
     }
 }

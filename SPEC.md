@@ -1,6 +1,6 @@
 # Small Business Expense Tracker
 
-Status: owner-approved architecture and authoritative functional specification (2026-11-11). Reviewed 2026-11-11. Foundation and authentication/roles implemented locally; remaining workflows follow PLAN.md.
+Status: owner-approved architecture and authoritative functional specification (2026-11-11). Reviewed 2026-11-11. Foundation, authentication/roles, expenses and categories implemented locally; remaining workflows follow PLAN.md.
 
 ## 1. Scope
 
@@ -105,6 +105,10 @@ Interface language: French. Amount entry accepts decimal comma or point; display
 | Notifications | Dedicated newest-first section, unread badge, read/unread state, mark read/unread and all read, related expense link. |
 | Categories | Administrator only: create, edit, disable; never delete historical associations. |
 | Paramètres du compte | Available after onboarding. Permanent gear-icon navigation entry with active-page highlighting on desktop/mobile; matching page title. Keep this link out of the top-right user menu; retain logout there. Regular app layout with separate password/MFA sections and stable visible password fields; own password and required MFA/recovery management; no account/role administration. |
+
+Provide French default expense categories adapted to ProxyMed’s respiratory diagnostic centre and routine business operations. Seed only missing normalized names, preserving existing/custom categories and disabled status. Audit newly seeded categories as operator actions; never seed accounts or sample expenses. Default categories remain editable/deactivatable by administrators.
+
+All dropdown selectors in the expense/category filter popups are searchable using the same native component as expense category entry. The amount field selects its text on focus, accepts digits and a single comma or point, blocks invalid typed characters and more than three fractional digits, and normalizes valid entries to a decimal comma with three places on blur. Typing a leading separator inserts a leading zero. Reject malformed pastes in full instead of stripping characters or truncating values; keep backend validation authoritative. “Créer & Ajouter un autre” clears the amount for the next record. The expense table shows the first 20 description characters followed by `...` when longer; forms/details retain the full description.
 
 Expense fields: required date (future dates allowed unless business rules change), positive exact TND, one category, optional description. Create uses only active categories. Edit can keep its existing disabled category, but cannot switch to a different disabled category. Validate active category in the write transaction to handle concurrent disabling. Creator comes from the authenticated user and cannot be changed.
 
