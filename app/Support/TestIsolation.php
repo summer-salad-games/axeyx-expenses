@@ -68,6 +68,7 @@ final class TestIsolation
         $app['config']->set([
             'filesystems.disks.local.root' => $root.'/private',
             'filesystems.disks.attachments.root' => $root.'/attachments',
+            'filesystems.disks.tmp-for-tests' => ['driver' => 'local', 'root' => $root.'/private', 'visibility' => 'private', 'throw' => true],
             'cache.stores.file.path' => $root.'/cache',
             'cache.stores.file.lock_path' => $root.'/locks',
             'session.files' => $root.'/sessions',

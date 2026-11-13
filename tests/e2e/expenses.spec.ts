@@ -91,6 +91,25 @@ test('administrator, editor and viewer expense/category workflows with stale for
         await admin.getByRole('button', { name: 'Créer', exact: true }).click();
         await expect(admin.locator('[data-validation-error]')).toContainText('Ce nom de catégorie est déjà utilisé');
 
+        const disposableCategory = `À supprimer ${info.project.name}`;
+        await admin.goto('/categories/create');
+        await admin.getByRole('textbox', { name: 'Nom', exact: false }).fill(disposableCategory);
+        await admin.getByRole('button', { name: 'Créer', exact: true }).click();
+        await expect(admin).toHaveURL(/\/categories$/);
+        await admin.locator('.fi-ta-search-field input').fill(disposableCategory);
+        const disposableRow = admin.getByRole('row').filter({ hasText: disposableCategory });
+        await expect(disposableRow).toBeVisible();
+        await disposableRow.getByRole('button', { name: 'Supprimer', exact: true }).click();
+        const categoryDialog = admin.getByRole('alertdialog');
+        await expect(categoryDialog.getByText('Cette catégorie n’est utilisée par aucune dépense. Cette action est irréversible.', { exact: true })).toBeVisible();
+        await categoryDialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+        await expect(categoryDialog.locator('.fi-modal-window')).toBeHidden();
+        await expect(disposableRow).toBeVisible();
+        await disposableRow.getByRole('button', { name: 'Supprimer', exact: true }).click();
+        await categoryDialog.getByRole('button', { name: 'Supprimer', exact: true }).click();
+        await expect(disposableRow).toHaveCount(0);
+        await admin.locator('.fi-ta-search-field input').fill('');
+
         await login(editor, info.project.name, 'editor');
         expect((await editor.goto('/categories'))?.status()).toBe(403);
         await editor.goto('/expenses/create');
@@ -157,6 +176,7 @@ test('administrator, editor and viewer expense/category workflows with stale for
         await editor.goto('/expenses/create');
         await expenseForm(editor, category, '1,001', 'Formulaire périmé');
         await admin.goto(categoryEdit!);
+        await expect(admin.getByRole('button', { name: 'Supprimer', exact: true })).toHaveCount(0);
         await admin.getByRole('switch', { name: 'Catégorie active', exact: false }).uncheck();
         await admin.getByRole('button', { name: 'Sauvegarder les modifications', exact: true }).click();
         await expect(admin).toHaveURL(/\/categories$/);

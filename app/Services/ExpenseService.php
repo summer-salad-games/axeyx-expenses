@@ -18,12 +18,12 @@ final class ExpenseService
 {
     public function create(User $actor, array $data): Expense
     {
-        return $this->save($actor, $data);
+        return app(AttachmentService::class)->save($actor, null, $data['new_attachments'] ?? [], fn () => $this->save($actor, $data));
     }
 
     public function update(User $actor, Expense $expense, array $data): Expense
     {
-        return $this->save($actor, $data, $expense);
+        return app(AttachmentService::class)->save($actor, $expense, $data['new_attachments'] ?? [], fn () => $this->save($actor, $data, $expense));
     }
 
     private function save(User $actor, array $data, ?Expense $expense = null): Expense
@@ -60,13 +60,6 @@ final class ExpenseService
 
     public function delete(User $actor, Expense $expense): bool
     {
-        return DB::transaction(function () use ($actor, $expense): bool {
-            $record = Expense::query()->findOrFail($expense->getKey());
-            Gate::forUser($actor)->authorize('delete', $record);
-            $record->delete();
-            app(AuditRecorder::class)->record('expense.deleted', $record, actor: $actor);
-
-            return true;
-        }, 3);
+        return app(AttachmentService::class)->removeExpense($actor, $expense);
     }
 }

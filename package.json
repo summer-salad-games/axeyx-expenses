@@ -13,6 +13,7 @@
         "accounts:disable": "php artisan accounts:disable",
         "accounts:password": "php artisan accounts:password",
         "accounts:mfa-reset": "php artisan accounts:mfa-reset",
+        "attachments:reconcile": "php artisan attachments:reconcile",
         "test:e2e": "playwright test"
     },
     "devDependencies": {

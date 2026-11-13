@@ -93,6 +93,7 @@ class PoliciesTest extends TestCase
         $attachment = Attachment::factory()->for($expense)->create();
         $files = app(AttachmentPolicy::class);
         $this->assertTrue($files->view($actor, $attachment));
+        $attachment->delete();
         $expense->delete();
 
         $policy = app(ExpensePolicy::class);
@@ -107,7 +108,7 @@ class PoliciesTest extends TestCase
     }
 
     #[DataProvider('allRoles')]
-    public function test_category_management_is_administrator_only_and_never_hard_deletes(Role $role): void
+    public function test_category_management_and_unused_category_deletion_are_administrator_only(Role $role): void
     {
         $actor = $this->authorizedUser($role);
         $category = Category::factory()->create();
@@ -123,6 +124,8 @@ class PoliciesTest extends TestCase
         $category->forceFill(['is_active' => false])->save();
         $this->assertSame($allowed, $policy->view($actor, $category));
         $this->assertSame($allowed, $policy->update($actor, $category));
+        $this->assertSame($allowed, $policy->delete($actor, $category));
+        Expense::factory()->create(['category_id' => $category->id]);
         $this->assertFalse($policy->delete($actor, $category));
         $this->assertFalse($policy->deleteAny($actor));
         $this->assertFalse($policy->restore($actor, $category));

@@ -11,13 +11,12 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['expense_date', 'category_id', 'description'])]
 class Expense extends Model
 {
     /** @use HasFactory<ExpenseFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected function casts(): array
     {

@@ -18,6 +18,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -96,6 +97,14 @@ class ExpenseResource extends Resource
                 ->helperText(fn () => Category::query()->where('is_active', true)->exists()
                     ? null : 'Aucune catégorie active. Contactez un administrateur.'),
             Textarea::make('description')->label('Description')->maxLength(5000)->rows(4)->columnSpanFull(),
+            FileUpload::make('new_attachments')->label('Ajouter des pièces jointes')->multiple()->storeFiles(false)
+                ->disk('local')->visibility('private')->maxParallelUploads(1)
+                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+                ->maxSize(fn () => intdiv(config('expenses.attachments.file_bytes'), 1024))
+                ->maxFiles(fn () => config('expenses.attachments.count'))->previewable(false)->columnSpanFull()
+                ->helperText(fn () => 'JPEG, PNG, WebP ou PDF. '.config('expenses.attachments.count').' fichiers maximum, '
+                    .intdiv(config('expenses.attachments.file_bytes'), 1048576).' Mio par fichier, '
+                    .intdiv(config('expenses.attachments.total_bytes'), 1048576).' Mio au total. Images : 16 mégapixels maximum. Les fichiers existants sont conservés.'),
         ]);
     }
 
@@ -164,7 +173,8 @@ class ExpenseResource extends Resource
     public static function deleteAction(): DeleteAction
     {
         return DeleteAction::make()->authorize(fn (Expense $record) => self::canDelete($record))
-            ->modalDescription('Cette dépense sera retirée du registre. Ses pièces jointes seront conservées.')
+            ->modalHeading('Supprimer définitivement cette dépense ?')
+            ->modalDescription('Cette action est irréversible. La dépense et toutes ses pièces jointes seront supprimées définitivement.')
             ->using(fn (Expense $record): bool => app(ExpenseService::class)->delete(Filament::auth()->user(), $record));
     }
 
@@ -181,5 +191,10 @@ class ExpenseResource extends Resource
             'view' => ViewExpense::route('/{record}'),
             'edit' => EditExpense::route('/{record}/edit'),
         ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [RelationManagers\AttachmentsRelationManager::class];
     }
 }

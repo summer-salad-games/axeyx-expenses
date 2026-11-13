@@ -6,6 +6,7 @@ namespace App\Policies;
 
 use App\Enums\Role;
 use App\Models\Category;
+use App\Models\Expense;
 use App\Models\User;
 use App\Security\AccountAccess;
 
@@ -38,7 +39,8 @@ class CategoryPolicy
 
     public function delete(User $user, Category $category): bool
     {
-        return false;
+        return $this->update($user, $category)
+            && ! Expense::query()->where('category_id', $category->getKey())->exists();
     }
 
     public function deleteAny(User $user): bool

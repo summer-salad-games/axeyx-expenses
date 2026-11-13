@@ -24,4 +24,9 @@ class EditCategory extends EditRecord
     {
         return CategoryResource::getUrl();
     }
+
+    protected function getHeaderActions(): array
+    {
+        return [CategoryResource::deleteAction()->successRedirectUrl(CategoryResource::getUrl())];
+    }
 }

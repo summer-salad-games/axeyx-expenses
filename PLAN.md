@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: approved by the owner on 2026-11-11 ("I validate everything"); milestones 1–2 implemented and locally verified. Milestone 2 implementation and automated verification are complete as of 2026-11-12. Owner authorized the milestone 2 commit/push on 2026-11-12; detailed owner-run desktop/mobile edge-case results have not been separately reported. Milestone 3 was authorized on 2026-11-12 and is implemented/locally verified; the owner’s quick test found no alarming issues; the owner authorized the milestone 3 commit/push on 2026-11-12. Next implementation milestone: 4, attachments, when requested. Complete and verify each milestone before continuing; update this file with results. Code and review are AI-only, per AGENTS.md.
+Status: architecture approved by the owner on 2026-11-11 ("I validate everything"). Milestones 1–4 are implemented and locally verified; milestones 1–3 are committed/pushed with owner authorization. The owner validated milestone 4 attachment testing and authorized its commit/push on 2026-11-13. Next implementation milestone: 5, statistics, after milestone 4 validation and a request to continue. Complete and verify each milestone before continuing. Code and review are AI-only, per AGENTS.md.
 
 ## Planning evidence
 
@@ -66,12 +66,14 @@ Owner UX feedback (2026-11-11): removed the duplicate account-settings link from
 Owner feedback (2026-11-12): a quick test found no alarming issues. Device/scenario details were not specified. The owner authorized the milestone 3 Git checkpoint and push on 2026-11-12.
 
 - [x] Exact TND value parsing/formatting and bounds with unit tests; server-owned creator/storage values.
-- [x] Filament expense list/details/create/edit/soft delete; shared visibility; search/date/category/creator filters, sort/pagination and destructive confirmation.
+- [x] Filament expense list/details/create/edit/permanent delete; shared visibility; search/date/category/creator filters, sort/pagination and destructive confirmation.
 - [x] Administrator categories create/edit/disable, case-insensitive uniqueness and active-choice validation with historical-category preservation.
 - [x] Expense/category Policies, audit entries, transaction boundaries and bounded busy retries.
 - [x] Test every relevant matrix cell, protected-field tampering and own/other deletion; Playwright editor/admin/viewer workflows.
 
 Completion: expenses and categories work for each role, exact money and disabled/deleted rules hold, feature/security/browser tests pass and documentation reflects actual commands/UI.
+
+The following evidence records the original milestone 3 implementation. The owner superseded soft deletion and added unused-category deletion on 2026-11-13, as recorded in milestone 4.
 
 Implemented/verified 2026-11-12: native Filament expense list/create/edit/detail and administrator category resources, with shared visibility, mobile stacked rows, search/date/category/creator filters, integer amount sorting, pagination and confirmed soft deletion. No bulk delete, restore, force delete or category deletion actions are exposed. Empty/no-active-category states and French form errors are included. Category active-state checks and fresh record/actor authorization run inside three-attempt SQLite transactions; required domain audits commit atomically. Only whitelisted fields are written; creators and storage values remain server-owned. Amount strings accept comma/point and map exactly to positive integer millimes without floating-point conversion; the existing configurable ceiling is bounded by the database ceiling. AuditRecorder now supports domain-record subjects while preserving its metadata whitelist.
 
@@ -89,17 +91,47 @@ Passed 165 PHP tests/1244 assertions, all 12 desktop/mobile Playwright checks, P
 
 ## 4. Attachments
 
-- [ ] Private temp/final storage, generated paths, allowlisted image/PDF validation, configurable per-file/count/total limits under concurrent edits.
-- [ ] Safe authorized preview/view/download routes; Filament uploads/details/removal preserve existing attachments.
-- [ ] Stage/commit/compensation, after-commit cleanup, consistency locking and conservative crash reconciliation.
-- [ ] Adversarial uploads/paths/MIME, anonymous/role access, totals and partial failure tests; real image/PDF browser uploads and downloads.
+Implemented and locally verified on 2026-11-13. The owner confirmed attachment testing was working and authorized commit/push on 2026-11-13.
 
-Completion: required formats work privately, malicious/unauthorized requests fail, deleted expenses retain files, failure injection proves reconciliation and no referenced files are removed.
+- [x] Private temp/final storage, generated paths, allowlisted image/PDF validation, configurable per-file/count/total limits under concurrent edits.
+- [x] Safe authorized preview/view/download routes; Filament uploads/details/removal preserve existing attachments.
+- [x] Stage/commit/compensation, after-commit cleanup, consistency locking and conservative crash reconciliation.
+- [x] Adversarial uploads/paths/MIME, anonymous/role access, totals and partial failure tests; real image/PDF browser uploads and downloads.
+
+Completion: required formats work privately, malicious/unauthorized requests fail, confirmed expense deletion removes its records/files, failure injection proves reconciliation and no referenced files are removed.
+
+Passed **194 PHP tests / 1453 assertions**, **14 desktop/mobile Playwright checks**, Pint, Vite build, Composer validation/platform checks on local PHP 8.5.12, and Composer/npm audits with no known advisories. Logs: `.artifacts/m4-full-php.log`, `.artifacts/m4-full-browser.log`, `.artifacts/m4-build.log` and the matching audit/format logs. Desktop/mobile attachment screenshots were visually inspected.
+
+Uploads on create/edit use native Filament fields with one parallel upload, private Livewire staging and repeated final checks. Existing documents are listed on edit/details; images have authenticated previews, PDFs download by default with an explicit sandboxed view route, and removal requires confirmation. No native mutation action bypasses the services. Role/ownership, anonymous/incomplete/revoked sessions, deleted expenses, path traversal/symlinks, extension/MIME mismatches, malformed images/PDFs, configured limits and forged stored references are covered. Browser checks upload actual image/PDF bytes, verify previews and downloaded bytes, retain files through edits, cancel/confirm removal, and recheck access from a separate viewer browser. Mobile attachment lists load immediately; an initial lazy-load viewport issue was corrected. Early browser harness failures were French button selectors, corrected before the final passing run.
+
+One `flock` consistency lock serializes attachment changes/cleanup and is available for future backup staging. Bytes are copied and hash/size-verified outside DB transactions; expense/attachment/audit rows commit together with bounded SQLite retries. Ambient transactions are rejected so file deletion cannot precede an outer commit. Failure injection verifies partial-copy/audit rollback compensation and retryable cleanup. Two real PHP processes compete for the same expense: both count and total-byte limits permit one mutation and reject the other, leaving exactly one referenced file. Reconciliation defaults to dry-run, verifies referenced hashes/sizes, and deletes only generated unreferenced files after at least 24 hours, including expired private temporary data. Files still referenced by attachment records are never purged by orphan cleanup. Permanent expense deletion was subsequently authorized below. An hourly schedule is defined; no scheduler/global service was installed.
+
+Separate read-only AI review found that MIME/header/EOF-only PDF checks accepted garbage documents. This was resolved using maintained `smalot/pdfparser` 2.13.1 and a genuine catalog/pages/xref fixture, with regression coverage. Structural parsing and GD decoding run in a 128 MiB child process with 5-second CPU/8-second wall limits; PDF decompression/nesting, 500 pages and 16-megapixel image guards bound resource use. Parser temporary files use canonical project-private storage, also checked after AI review. Re-review reported no remaining scoped blockers; this is AI review, not a human audit or full production release review. The new `ext-gd` requirement and parser are locked by Composer; the initial attachment implementation needed no migration or owner database reset. The subsequent owner-approved permanent-deletion migration is recorded below.
+
+Unverified release gates: actual PHP 8.4 ARM64 CLI/FPM/GD format support and child-process execution under the production identity, PHP/Caddy upload-body alignment, production scheduler and infrastructure. Realtime/reconnection workflows remain milestone 6; coherent backups use this lock in milestone 7. No Pi access, production uploads, global changes or milestone 4 commit/push occurred.
+
+Owner-test fix (2026-11-13): temporary uploads succeeded, but saving two PDFs failed because one readable PDF had horizontal whitespace after its version header. The preliminary signature check incorrectly required an immediate newline. It now accepts PDF whitespace before structural validation; signature, parsing, timeout and image errors have distinct French messages. Both owner-uploaded temporary PDFs passed the corrected validation in a diagnostic without saving expense/attachment records or changing their contents. Added a genuine whitespace-header PDF regression and used that variant in desktop/mobile upload/download workflows. Passed 30 attachment PHP tests/213 assertions, both attachment browser checks, Pint and diff checks. Logs: `.artifacts/m4-upload-fix-php.log` and `.artifacts/m4-upload-fix-browser.log`. No asset changes or additional dependency changes; no commit/push.
+
+### Permanent deletion and category lifecycle — owner revision, 2026-11-13
+
+The owner replaced soft deletion with permanent expense/attachment deletion and clear irreversible-action confirmations, and requested deletion of unused categories while referenced categories can only be disabled. The owner explicitly confirmed development-only data and authorized purging all previously soft-deleted expenses/files without legacy compatibility.
+
+Removed SoftDeletes and the deleted_at column through an additive migration. It holds the shared consistency lock, removes previous deleted-expense/attachment rows with operator audits in the same short transaction as the schema/index change, and removes unreferenced physical files after commit. A safe rerun handles interruption between commit and migration-log recording. Down restores the schema only; permanently removed data cannot be recovered. Applied locally after disposable migration tests and read-only AI review: **4 previously deleted expenses and 2 linked files purged**, current expenses/accounts preserved. No reset, production access or global changes.
+
+New expense deletion refetches/authorizes ownership and commits expense/attachment removal plus audits atomically under the same storage lock. Files remain if the transaction fails; failed post-commit filesystem removal is retried by reconciliation. Used categories have no Delete action, while unused categories expose confirmed deletion on list/edit pages. Server policy and transaction recheck every reference, with SQLite snapshot retries and restrictive foreign keys covering concurrent expense creation. Audit records remain after permanent deletion.
+
+Verification complete: full PHP suite passed **205 tests/1518 assertions**, plus the migration-specific safe-rerun/rollback checks (**2 tests/17 assertions**), all **14 desktop/mobile browser checks**, Pint, Vite build and Composer/npm audits with no known advisories. Browser checks cover cancel/confirm, shared-file access becoming 404, unused-category deletion and used-category disable-only behavior. Early harness failures involved modal exit animations causing duplicate button matches and a newly created category on another pagination page; explicit modal-close waits and category search corrected them. The long onboarding browser test now has a 60-second budget for its multi-login/notification workflow. Final logs: `.artifacts/permanent-delete-php.log`, `.artifacts/permanent-delete-migration.log`, `.artifacts/permanent-delete-browser.log`, `.artifacts/permanent-delete-build.log` and the matching formatting/audit logs. Separate read-only AI review found no remaining scoped authorization, consistency or migration blockers; this is not a human audit. No commit/push.
+
+Photo preview follow-up (2026-11-13, superseded by the owner clarification below): removed the upload field’s explicit preview disable and enabled 160px native image thumbnails. Saved photo thumbnails now link to the authenticated full-image preview in a new tab. Passed 32 attachment PHP tests/226 assertions, desktop/mobile attachment browser workflows (including visible upload canvas and full-image rendering), Pint, build and diff checks. Logs: `.artifacts/photo-preview-php.log`, `.artifacts/photo-preview-browser.log`, `.artifacts/photo-preview-build.log`. No dependencies, data changes or commit/push.
+
+Attachment consistency clarification (2026-11-13): owner requested no previews in the upload field and identical viewing behavior for saved files. Upload thumbnails are disabled again. Images and PDFs now have the same **Ouvrir** action and authenticated `/attachments/{id}/view` URL; saved image thumbnails use that URL too. Removed the separate `/preview` route; downloads remain separate. Passed 32 attachment PHP tests/230 assertions (all five allowed extensions render inline at `/view`, old `/preview` returns 404), both desktop/mobile attachment workflows (no upload preview, visible Ouvrir links, full-image rendering, PDF view/download), Pint, build and diff checks. Logs: `.artifacts/attachment-view-php.log`, `.artifacts/attachment-view-browser.log`, `.artifacts/attachment-view-build.log`. No dependency/data changes or commit/push.
+
+Owner acceptance (2026-11-13): attachments reported working; milestone 4 validated and commit/push explicitly authorized. The subsequent statistics milestone has not been started.
 
 ## 5. Statistics
 
 - [ ] Shared dashboard state, presets/custom bounds/active period; default current month.
-- [ ] Integer SQLite total/count/month/category/creator queries, empty/missing-month handling, exact chart labels and soft-delete exclusion.
+- [ ] Integer SQLite total/count/month/category/creator queries, empty/missing-month handling, exact chart labels and exclusion of deleted expenses.
 - [ ] Test date boundaries/timezone, invalid ranges, no attachment join duplication, totals and cross-widget filter consistency.
 - [ ] Playwright desktop/mobile/custom-range behavior and accessible controls.
 
@@ -163,10 +195,10 @@ Completion: every definition-of-done item in SPEC.md has evidence. Do not mark p
 - Local reset shortcut: `npm run db:reset` runs `php artisan migrate:fresh --seed && php artisan optimize:clear` directly. The seed flag restores the owner-requested default categories and creates no accounts. README documents its local-only destructive effect; the owner’s database was not reset. No dependencies changed.
 
 - Stable resolution: Laravel 13.42.0, Filament 5.11.2, Livewire 4.4.8, Reverb 1.13.0, PHPUnit 12.5.43, Vite 8.3.7; exact Composer/npm dependency trees are locked.
-- Passed: migrations on disposable local SQLite; 165 PHPUnit tests/1244 assertions; 12 desktop/mobile Playwright checks; Pint; Vite build; composer validate --strict and check-platform-reqs on PHP 8.5.12; Composer/npm audits with no known advisories. Applied the additive password/completion onboarding migrations to the existing local development database.
-- Regression coverage: foundation constraints/integer sums/date-only storage/Unicode category uniqueness/reconnect PRAGMAs/private files/test isolation, plus milestones 2–3 authentication, authorization and expense/category cases listed above.
+- Passed: migrations on disposable local SQLite; 205 PHPUnit tests/1518 assertions; 14 desktop/mobile Playwright checks; Pint; Vite build; composer validate --strict and check-platform-reqs on PHP 8.5.12; Composer/npm audits with no known advisories. Applied the additive password/completion onboarding migrations to the existing local development database.
+- Regression coverage: foundation constraints/integer sums/date-only storage/Unicode category uniqueness/reconnect PRAGMAs/private files/test isolation, plus milestones 2–4 authentication, authorization, expenses/categories and attachments listed above.
 - Separate AI foundation review found unsafe symlink/cache isolation; fixes and refusal tests were added and the reviewer confirmed both findings resolved. This is scoped AI review, not a human audit or full-release review.
 - Test suites disconnect file-backed connections after teardown; the browser harness uses fresh random credentials and disposable app keys/data each run.
-- Unverified: actual PHP 8.4 execution, production infrastructure and milestone 4–9 workflows, including active socket revocation. No Pi access, global configuration changes, production tests or uploads occurred.
+- Unverified: actual PHP 8.4 execution, production infrastructure and milestone 5–9 workflows, including active socket revocation. No Pi access, global configuration changes, production tests or uploads occurred.
 
 UI refinement (2026-11-11): root-level login, ProxyMed branding, light-only flat colors and no top accent line. Mobile login/error pages are unboxed and full-width with larger controls; 404 remains centered. Foundation browser checks retain usable mobile-width coverage. Light-only behavior was also verified at 390px/1280px with both system dark preference and a previously saved dark choice.

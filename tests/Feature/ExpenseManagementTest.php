@@ -96,7 +96,7 @@ class ExpenseManagementTest extends TestCase
                     $action === 'update' ? $service->update($actor, $expense, $this->data($expense->category)) : $service->delete($actor, $expense);
                     $this->fail('Unauthorized write was accepted.');
                 } catch (AuthorizationException) {
-                    $this->assertFalse($expense->fresh()->trashed());
+                    $this->assertDatabaseHas('expenses', ['id' => $expense->id]);
                 }
             }
 
@@ -106,7 +106,7 @@ class ExpenseManagementTest extends TestCase
         app(ExpenseService::class)->update($actor, $expense, $this->data($expense->category));
         $this->assertSame(12501, $expense->fresh()->amount_millimes);
         app(ExpenseService::class)->delete($actor, $expense);
-        $this->assertSoftDeleted($expense);
+        $this->assertDatabaseMissing('expenses', ['id' => $expense->id]);
     }
 
     public function test_real_resource_pages_save_exact_amounts_and_ignore_protected_fields(): void
@@ -174,7 +174,7 @@ class ExpenseManagementTest extends TestCase
         $this->assertDatabaseCount('expenses', 0);
     }
 
-    public function test_soft_delete_removes_all_delivery_routes_but_retains_attachments(): void
+    public function test_permanent_delete_removes_expense_attachment_rows_and_delivery_routes(): void
     {
         $actor = $this->login();
         $expense = Expense::factory()->create();
@@ -183,7 +183,8 @@ class ExpenseManagementTest extends TestCase
         $this->get('/expenses/'.$expense->id)->assertNotFound();
         $this->get('/expenses/'.$expense->id.'/edit')->assertNotFound();
         Livewire::test(ListExpenses::class)->assertCanNotSeeTableRecords([$expense]);
-        $this->assertDatabaseHas('attachments', ['id' => $attachment->id]);
+        $this->assertDatabaseMissing('attachments', ['id' => $attachment->id]);
+        $this->assertDatabaseMissing('expenses', ['id' => $expense->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'expense.deleted', 'actor_id' => $actor->id]);
     }
 
@@ -194,7 +195,8 @@ class ExpenseManagementTest extends TestCase
         $creator = User::factory()->create(['name' => 'Docteur Martin']);
         $first = Expense::factory()->create(['expense_date' => '2026-11-01', 'category_id' => $category->id, 'created_by' => $creator->id, 'amount_millimes' => 1001, 'description' => 'Achat de référence']);
         $second = Expense::factory()->create(['expense_date' => '2026-11-30', 'amount_millimes' => 9000]);
-        $deleted = Expense::factory()->create(['deleted_at' => now()]);
+        $deleted = Expense::factory()->create();
+        $deleted->delete();
         Livewire::test(ListExpenses::class)->assertCanSeeTableRecords([$second, $first], inOrder: true)->assertCanNotSeeTableRecords([$deleted])
             ->searchTable('référence')->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
         Livewire::test(ListExpenses::class)->searchTable('Matériel médical')->assertCanSeeTableRecords([$first]);
@@ -338,6 +340,78 @@ class ExpenseManagementTest extends TestCase
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('amount', $exception->errors());
         }
+    }
+
+    #[DataProvider('roles')]
+    public function test_only_administrators_can_delete_unused_categories(string $role): void
+    {
+        $actor = $this->login($role);
+        $category = Category::factory()->create();
+        if ($role !== 'administrator') {
+            $this->expectException(AuthorizationException::class);
+        }
+        app(CategoryService::class)->delete($actor, $category);
+        $this->assertDatabaseMissing('categories', ['id' => $category->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'category.deleted', 'subject_id' => (string) $category->id, 'actor_id' => $actor->id]);
+    }
+
+    public function test_category_delete_action_only_exists_when_unused_and_uses_audited_service(): void
+    {
+        $actor = $this->login();
+        $unused = Category::factory()->create();
+        $used = Category::factory()->create();
+        Expense::factory()->create(['category_id' => $used->id]);
+        Livewire::test(ListCategories::class)
+            ->assertTableActionVisible('delete', $unused)->assertTableActionHidden('delete', $used)
+            ->callAction(TestAction::make('delete')->table($unused))->assertHasNoActionErrors();
+        $this->assertDatabaseMissing('categories', ['id' => $unused->id]);
+        Livewire::test(EditCategory::class, ['record' => $used->id])->assertActionHidden('delete');
+        app(CategoryService::class)->update($actor, $used, ['name' => $used->name, 'is_active' => false]);
+        $this->assertFalse($used->fresh()->is_active);
+        $other = Category::factory()->create();
+        Livewire::test(EditCategory::class, ['record' => $other->id])->callAction('delete')->assertRedirect('/categories');
+        $this->assertDatabaseMissing('categories', ['id' => $other->id]);
+    }
+
+    public function test_category_delete_rechecks_expense_references(): void
+    {
+        $actor = $this->login();
+        $category = Category::factory()->create();
+        Expense::factory()->create(['category_id' => $category->id]);
+        try {
+            app(CategoryService::class)->delete($actor, $category);
+            $this->fail('Referenced category deleted.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('name', $exception->errors());
+        }
+        $this->assertDatabaseHas('categories', ['id' => $category->id]);
+    }
+
+    public function test_concurrent_expense_creation_prevents_category_deletion_after_snapshot_retry(): void
+    {
+        $actor = $this->login();
+        $category = Category::factory()->create();
+        config(['database.connections.racer' => config('database.connections.sqlite')]);
+        $raced = false;
+        Event::listen('eloquent.creating: '.AuditLog::class, function (AuditLog $audit) use ($actor, $category, &$raced): void {
+            if ($audit->action === 'category.deleted' && ! $raced) {
+                $raced = true;
+                DB::connection('racer')->table('expenses')->insert([
+                    'expense_date' => '2026-11-13', 'amount_millimes' => 1000,
+                    'category_id' => $category->id, 'created_by' => $actor->id,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        });
+        try {
+            app(CategoryService::class)->delete($actor, $category);
+            $this->fail('Concurrently referenced category deleted.');
+        } catch (ValidationException) {
+            $this->assertTrue($raced);
+        }
+        $this->assertDatabaseHas('categories', ['id' => $category->id]);
+        $this->assertDatabaseHas('expenses', ['category_id' => $category->id]);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'category.deleted']);
     }
 
     public function test_create_another_clears_the_amount_and_creates_a_separate_next_expense(): void

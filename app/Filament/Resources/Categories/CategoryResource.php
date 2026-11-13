@@ -6,8 +6,11 @@ use App\Filament\Resources\Categories\Pages\CreateCategory;
 use App\Filament\Resources\Categories\Pages\EditCategory;
 use App\Filament\Resources\Categories\Pages\ListCategories;
 use App\Models\Category;
+use App\Services\CategoryService;
 use BackedEnum;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
@@ -39,7 +42,7 @@ class CategoryResource extends Resource
         return $schema->components([
             TextInput::make('name')->label('Nom')->required()->maxLength(100),
             Toggle::make('is_active')->label('Catégorie active')->default(true)
-                ->helperText('Désactivez une catégorie pour empêcher son utilisation dans les nouvelles dépenses. Son historique est conservé.'),
+                ->helperText('Une catégorie utilisée peut être désactivée pour empêcher de nouvelles sélections. Seules les catégories sans dépense peuvent être supprimées.'),
         ])->columns(1);
     }
 
@@ -50,7 +53,7 @@ class CategoryResource extends Resource
             IconColumn::make('is_active')->label('Active')->boolean(),
         ])->filters([TernaryFilter::make('is_active')->label('Statut')->searchable()->native(false)
             ->placeholder('Toutes')->trueLabel('Actives')->falseLabel('Désactivées')])
-            ->recordActions([EditAction::make()->action(null)])->stackedOnMobile()->defaultSort('name')
+            ->recordActions([EditAction::make()->action(null), self::deleteAction()])->stackedOnMobile()->defaultSort('name')
             ->emptyStateHeading('Aucune catégorie')->emptyStateDescription('Créez une catégorie pour commencer à enregistrer des dépenses.');
     }
 
@@ -61,5 +64,13 @@ class CategoryResource extends Resource
             'create' => CreateCategory::route('/create'),
             'edit' => EditCategory::route('/{record}/edit'),
         ];
+    }
+
+    public static function deleteAction(): DeleteAction
+    {
+        return DeleteAction::make()->authorize(fn (Category $record) => self::canDelete($record))
+            ->modalHeading('Supprimer définitivement cette catégorie ?')
+            ->modalDescription('Cette catégorie n’est utilisée par aucune dépense. Cette action est irréversible.')
+            ->using(fn (Category $record): bool => app(CategoryService::class)->delete(Filament::auth()->user(), $record));
     }
 }

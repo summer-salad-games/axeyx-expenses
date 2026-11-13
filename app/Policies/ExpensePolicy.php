@@ -18,7 +18,7 @@ class ExpensePolicy
 
     public function view(User $user, Expense $expense): bool
     {
-        return $this->viewAny($user) && $expense->exists && ! $expense->trashed();
+        return $this->viewAny($user) && $expense->exists && Expense::query()->whereKey($expense->getKey())->exists();
     }
 
     public function create(User $user): bool

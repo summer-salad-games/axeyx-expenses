@@ -29,6 +29,7 @@ class EditExpense extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['amount'] = TndAmount::decimal($this->getRecord()->amount_millimes);
+        $data['new_attachments'] = [];
 
         return $data;
     }

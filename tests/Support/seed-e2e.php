@@ -14,7 +14,7 @@ app(DefaultCategorySeeder::class)->run();
 $fixtures = [];
 $provider = AppAuthentication::make()->recoverable();
 foreach (['desktop', 'mobile'] as $project) {
-    foreach (['login', 'setup', 'mfa_reset', 'm3_admin', 'm3_editor', 'm3_viewer'] as $flow) {
+    foreach (['login', 'setup', 'mfa_reset', 'm3_admin', 'm3_editor', 'm3_viewer', 'm4_admin', 'm4_editor', 'm4_viewer'] as $flow) {
         $key = $project.'_'.$flow;
         $password = Str::password(32);
         $complete = ! in_array($flow, ['setup', 'mfa_reset'], true);
@@ -29,8 +29,8 @@ foreach (['desktop', 'mobile'] as $project) {
                 default => 'Compte de test',
             }, 'email' => $key.'@example.test',
             'password' => Hash::make($password), 'role' => match ($flow) {
-                'm3_admin' => Role::Administrator,
-                'm3_editor' => Role::Editor,
+                'm3_admin', 'm4_admin' => Role::Administrator,
+                'm3_editor', 'm4_editor' => Role::Editor,
                 default => Role::Viewer,
             },
             'must_change_password' => $flow === 'setup',

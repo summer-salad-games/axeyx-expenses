@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Category;
+use App\Models\Expense;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,22 @@ final class CategoryService
     public function update(User $actor, Category $category, array $data): Category
     {
         return $this->save($actor, $data, $category);
+    }
+
+    public function delete(User $actor, Category $category): bool
+    {
+        return DB::transaction(function () use ($actor, $category): bool {
+            $record = Category::query()->findOrFail($category->getKey());
+            Gate::forUser($actor)->authorize('update', $record);
+            if (Expense::query()->where('category_id', $record->getKey())->exists()) {
+                throw ValidationException::withMessages(['name' => 'Cette catégorie est utilisée par des dépenses. Désactivez-la au lieu de la supprimer.']);
+            }
+            Gate::forUser($actor)->authorize('delete', $record);
+            app(AuditRecorder::class)->record('category.deleted', $record, actor: $actor);
+            $record->delete();
+
+            return true;
+        }, 3);
     }
 
     private function save(User $actor, array $data, ?Category $category = null): Category

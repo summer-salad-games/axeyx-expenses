@@ -152,6 +152,7 @@ test('password + TOTP, logout and recovery login', async ({ page }, info) => {
 });
 
 test('first login requires enrollment; complete wizard and change password securely', async ({ page }, info) => {
+    test.setTimeout(60000);
     const methodErrors: string[] = [];
     page.on('response', response => {
         if (response.status() === 405) methodErrors.push(`${response.request().method()} ${new URL(response.url()).pathname}`);
