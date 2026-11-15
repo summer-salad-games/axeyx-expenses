@@ -8,7 +8,7 @@ use App\Filament\Auth\Login;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Setup\Complete;
 use App\Filament\Setup\Password;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountAccess;
 use App\Security\AccountSessions;
@@ -53,7 +53,7 @@ class OnboardingTest extends TestCase
         $user = $this->pendingUser(Role::from($role));
         $this->assertFalse(app(AccountAccess::class)->allows($user));
         $this->assertFalse(Dashboard::canAccess());
-        $this->assertFalse(Gate::forUser($user)->allows('viewAny', Expense::class));
+        $this->assertFalse(Gate::forUser($user)->allows('viewAny', Transaction::class));
         $this->get('/')->assertRedirect('/setup/password');
         $this->get('/setup')->assertRedirect('/setup/password');
         $this->get('/setup/password')->assertOk()->assertSee('Choisir votre mot de passe')

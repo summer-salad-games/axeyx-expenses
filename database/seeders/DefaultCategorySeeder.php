@@ -36,15 +36,18 @@ class DefaultCategorySeeder extends Seeder
 
     public function run(): void
     {
-        foreach (self::NAMES as $name) {
-            DB::transaction(function () use ($name): void {
-                if (Category::query()->where('name_key', Category::nameKey($name))->exists()) {
-                    return;
-                }
+        foreach (['expense' => self::NAMES, 'revenue' => ['Examens médicaux', 'Consultations médicales', 'Autres recettes']] as $type => $names) {
+            foreach ($names as $name) {
+                DB::transaction(function () use ($name, $type): void {
+                    if (Category::query()->where('type', $type)->where('name_key', Category::nameKey($name))->exists()) {
+                        return;
+                    }
 
-                $category = Category::create(['name' => $name]);
-                app(AuditRecorder::class)->record('category.created', $category);
-            }, 3);
+                    $category = new Category;
+                    $category->forceFill(['name' => $name, 'type' => $type])->save();
+                    app(AuditRecorder::class)->record('category.created', $category);
+                }, 3);
+            }
         }
     }
 }

@@ -5,20 +5,20 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Role;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountAccess;
 
-class ExpensePolicy
+class TransactionPolicy
 {
     public function viewAny(User $user): bool
     {
         return app(AccountAccess::class)->allows($user);
     }
 
-    public function view(User $user, Expense $expense): bool
+    public function view(User $user, Transaction $transaction): bool
     {
-        return $this->viewAny($user) && $expense->exists && Expense::query()->whereKey($expense->getKey())->exists();
+        return $this->viewAny($user) && $transaction->exists && Transaction::query()->whereKey($transaction->getKey())->exists();
     }
 
     public function create(User $user): bool
@@ -26,17 +26,17 @@ class ExpensePolicy
         return $this->viewAny($user) && in_array($user->role, [Role::Administrator, Role::Editor], true);
     }
 
-    public function update(User $user, Expense $expense): bool
+    public function update(User $user, Transaction $transaction): bool
     {
-        return $this->view($user, $expense) && (
+        return $this->view($user, $transaction) && (
             $user->role === Role::Administrator
-            || ($user->role === Role::Editor && $expense->created_by === $user->id)
+            || ($user->role === Role::Editor && $transaction->created_by === $user->id)
         );
     }
 
-    public function delete(User $user, Expense $expense): bool
+    public function delete(User $user, Transaction $transaction): bool
     {
-        return $this->update($user, $expense);
+        return $this->update($user, $transaction);
     }
 
     public function deleteAny(User $user): bool
@@ -45,7 +45,7 @@ class ExpensePolicy
         return $this->viewAny($user) && $user->role === Role::Administrator;
     }
 
-    public function restore(User $user, Expense $expense): bool
+    public function restore(User $user, Transaction $transaction): bool
     {
         return false;
     }
@@ -55,7 +55,7 @@ class ExpensePolicy
         return false;
     }
 
-    public function forceDelete(User $user, Expense $expense): bool
+    public function forceDelete(User $user, Transaction $transaction): bool
     {
         return false;
     }

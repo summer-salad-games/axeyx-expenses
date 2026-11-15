@@ -18,14 +18,13 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token', 'app_authentication_secret', 'app_authentication_recovery_codes'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
+    use HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery;
 
     public function canAccessPanel(Panel $panel): bool
     {
@@ -51,9 +50,9 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return Attribute::make(set: fn (string $value): string => mb_strtolower(trim($value), 'UTF-8'));
     }
 
-    /** @return HasMany<Expense, $this> */
-    public function expenses(): HasMany
+    /** @return HasMany<Transaction, $this> */
+    public function transactions(): HasMany
     {
-        return $this->hasMany(Expense::class, 'created_by');
+        return $this->hasMany(Transaction::class, 'created_by');
     }
 }

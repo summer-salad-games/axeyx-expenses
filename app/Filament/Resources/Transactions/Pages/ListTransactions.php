@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Filament\Resources\Expenses\Pages;
+namespace App\Filament\Resources\Transactions\Pages;
 
-use App\Filament\Resources\Expenses\ExpenseResource;
+use App\Filament\Resources\Transactions\TransactionResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Components\Attributes\Exposed;
 
-class ListExpenses extends ListRecords
+class ListTransactions extends ListRecords
 {
-    protected static string $resource = ExpenseResource::class;
+    protected static string $resource = TransactionResource::class;
 
     protected function getHeaderActions(): array
     {

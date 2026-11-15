@@ -22,7 +22,7 @@ class EditCategory extends EditRecord
 
     protected function getRedirectUrl(): string
     {
-        return CategoryResource::getUrl();
+        return CategoryResource::getUrl('index');
     }
 
     protected function getHeaderActions(): array

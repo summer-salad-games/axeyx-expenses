@@ -16,13 +16,16 @@ class DefaultCategorySeederTest extends TestCase
     public function test_default_seeding_adds_medical_and_operating_categories_with_audits_but_no_accounts(): void
     {
         $this->seed();
-        $this->assertDatabaseCount('categories', 20);
+        $this->assertDatabaseCount('categories', 23);
         $this->assertDatabaseCount('users', 0);
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
         foreach (['Équipements médicaux', 'Maintenance et étalonnage', 'Médicaments, réactifs et gaz médicaux', 'Informatique, logiciels et visioconférence', 'Loyer et charges locatives', 'Autres dépenses'] as $name) {
             $this->assertDatabaseHas('categories', ['name' => $name, 'name_key' => Category::nameKey($name), 'is_active' => true]);
         }
-        $this->assertSame(20, AuditLog::query()->where('action', 'category.created')
+        foreach (['Examens médicaux', 'Consultations médicales', 'Autres recettes'] as $name) {
+            $this->assertDatabaseHas('categories', ['name' => $name, 'type' => 'revenue', 'is_active' => true]);
+        }
+        $this->assertSame(23, AuditLog::query()->where('action', 'category.created')
             ->where('subject_type', Category::class)->where('actor_kind', AuditActorKind::Operator)->whereNull('actor_id')->count());
     }
 
@@ -34,8 +37,8 @@ class DefaultCategorySeederTest extends TestCase
         $before = $existing->fresh()->getRawOriginal();
         $this->seed(DefaultCategorySeeder::class);
         $this->seed(DefaultCategorySeeder::class);
-        $this->assertDatabaseCount('categories', 21);
-        $this->assertDatabaseCount('audit_logs', 19);
+        $this->assertDatabaseCount('categories', 24);
+        $this->assertDatabaseCount('audit_logs', 22);
         $this->assertSame($before, $existing->fresh()->getRawOriginal());
         $this->assertDatabaseHas('categories', ['id' => $custom->id, 'name' => 'Catégorie personnalisée']);
     }

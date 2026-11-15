@@ -42,7 +42,7 @@ class AttachmentFiles
             }
         }
         $size = $path ? filesize($path) : false;
-        if (! $size || $size > config('expenses.attachments.file_bytes')) {
+        if (! $size || $size > config('transactions.attachments.file_bytes')) {
             throw ValidationException::withMessages(['new_attachments' => 'Chaque fichier doit être non vide et respecter la taille maximale autorisée.']);
         }
         $extension = strtolower($upload->getClientOriginalExtension());
@@ -60,7 +60,7 @@ class AttachmentFiles
         } else {
             $dimensions = @getimagesize($path);
             if (! $dimensions || ($dimensions['mime'] ?? '') !== $mime
-                || config('expenses.attachments.image_pixels') < $dimensions[0] * $dimensions[1]) {
+                || config('transactions.attachments.image_pixels') < $dimensions[0] * $dimensions[1]) {
                 $reject();
             }
         }

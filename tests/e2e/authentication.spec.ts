@@ -206,7 +206,7 @@ test('first login requires enrollment; complete wizard and change password secur
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Paramètres du compte' })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(page.getByRole('navigation', { name: 'En-tête', exact: true }).getByLabel('ProxyMed — Registre des dépenses')).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'En-tête', exact: true }).getByLabel('ProxyMed — Gestion des transactions')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page.screenshot({ path: `.artifacts/onboarding-settings-${info.project.name}.png`, fullPage: true });
     await logout(page);

@@ -6,19 +6,19 @@ use App\Enums\Role;
 use App\Filament\Resources\Categories\Pages\CreateCategory;
 use App\Filament\Resources\Categories\Pages\EditCategory;
 use App\Filament\Resources\Categories\Pages\ListCategories;
-use App\Filament\Resources\Expenses\Pages\CreateExpense;
-use App\Filament\Resources\Expenses\Pages\EditExpense;
-use App\Filament\Resources\Expenses\Pages\ListExpenses;
-use App\Filament\Resources\Expenses\Pages\ViewExpense;
+use App\Filament\Resources\Transactions\Pages\CreateTransaction;
+use App\Filament\Resources\Transactions\Pages\EditTransaction;
+use App\Filament\Resources\Transactions\Pages\ListTransactions;
+use App\Filament\Resources\Transactions\Pages\ViewTransaction;
 use App\Models\Attachment;
 use App\Models\AuditLog;
 use App\Models\Category;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountSessions;
 use App\Services\AccountService;
 use App\Services\CategoryService;
-use App\Services\ExpenseService;
+use App\Services\TransactionService;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -31,7 +31,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
-class ExpenseManagementTest extends TestCase
+class TransactionManagementTest extends TestCase
 {
     use DatabaseMigrations;
 
@@ -40,6 +40,62 @@ class ExpenseManagementTest extends TestCase
         parent::setUp();
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         Filament::bootCurrentPanel();
+    }
+
+    public function test_transaction_type_matches_its_category_and_can_be_changed_with_a_new_category(): void
+    {
+        $actor = $this->login();
+        $expense = Category::factory()->create();
+        $revenue = Category::factory()->create(['type' => 'revenue']);
+        $service = app(TransactionService::class);
+        foreach (['invalid', ['revenue'], null, 'revenue'] as $type) {
+            try {
+                $service->create($actor, [...$this->data($expense), 'type' => $type]);
+                $this->fail('Invalid type/category accepted.');
+            } catch (ValidationException) {
+                $this->assertDatabaseCount('transactions', 0);
+            }
+        }
+        $transaction = $service->create($actor, [...$this->data($revenue), 'type' => 'revenue']);
+        $this->assertSame('revenue', $transaction->type->value);
+        $this->assertSame(12501, $transaction->amount_millimes);
+        foreach (['-1', '+1', '0'] as $amount) {
+            try {
+                $service->update($actor, $transaction, [...$this->data($revenue), 'type' => 'revenue', 'amount' => $amount]);
+                $this->fail('Signed or zero magnitude accepted.');
+            } catch (ValidationException) {
+                $this->assertSame(12501, $transaction->fresh()->amount_millimes);
+            }
+        }
+        $attachment = Attachment::factory()->create(['transaction_id' => $transaction->id]);
+        $service->update($actor, $transaction, $this->data($expense));
+        $this->assertSame($attachment->id, $transaction->attachments()->sole()->id);
+        $this->assertSame('expense', $transaction->fresh()->type->value);
+        $this->assertSame($actor->id, $transaction->fresh()->created_by);
+        Livewire::test(CreateTransaction::class)->fillForm(['category_id' => $expense->id])
+            ->set('data.type', 'revenue')->assertFormSet(['category_id' => null]);
+        Livewire::test(ListTransactions::class)->filterTable('type', 'expense')->assertCanSeeTableRecords([$transaction]);
+        Livewire::test(ListTransactions::class)->filterTable('type', 'revenue')->assertCanNotSeeTableRecords([$transaction]);
+    }
+
+    public function test_category_names_are_unique_per_type_and_the_shared_table_filters_by_type(): void
+    {
+        $actor = $this->login();
+        $service = app(CategoryService::class);
+        $expense = $service->create($actor, ['name' => 'Commun', 'type' => 'expense']);
+        $revenue = $service->create($actor, ['name' => 'Commun', 'type' => 'revenue']);
+        $this->assertSame('revenue', $revenue->type->value);
+        Livewire::test(ListCategories::class)->assertCanSeeTableRecords([$expense, $revenue])
+            ->filterTable('type', 'expense')->assertCanSeeTableRecords([$expense])->assertCanNotSeeTableRecords([$revenue])
+            ->filterTable('type', 'revenue')->assertCanSeeTableRecords([$revenue])->assertCanNotSeeTableRecords([$expense]);
+        try {
+            $service->create($actor, ['name' => 'COMMUN', 'type' => 'revenue']);
+            $this->fail('Duplicate category accepted.');
+        } catch (ValidationException) {
+            $this->assertDatabaseCount('categories', 2);
+        }
+        $this->expectException(ValidationException::class);
+        $service->update($actor, $expense, ['name' => 'Commun', 'type' => 'revenue']);
     }
 
     public static function roles(): array
@@ -58,22 +114,22 @@ class ExpenseManagementTest extends TestCase
 
     private function data(?Category $category = null): array
     {
-        return ['expense_date' => '2026-11-12', 'amount' => '12,501', 'category_id' => ($category ?? Category::factory()->create())->id, 'description' => 'Fournitures de bureau'];
+        return ['type' => 'expense', 'transaction_date' => '2026-11-12', 'amount' => '12,501', 'category_id' => ($category ?? Category::factory()->create())->id, 'description' => 'Fournitures de bureau'];
     }
 
     #[DataProvider('roles')]
     public function test_every_role_can_read_shared_expenses_but_only_writers_can_create(string $role): void
     {
         $actor = $this->login($role);
-        $expense = Expense::factory()->create();
-        $this->get('/expenses')->assertOk();
-        $this->get('/expenses/'.$expense->id)->assertOk();
-        Livewire::test(ListExpenses::class)->assertCanSeeTableRecords([$expense]);
+        $transaction = Transaction::factory()->create();
+        $this->get('/transactions')->assertOk();
+        $this->get('/transactions/'.$transaction->id)->assertOk();
+        Livewire::test(ListTransactions::class)->assertCanSeeTableRecords([$transaction]);
         if ($role === 'viewer') {
-            $this->get('/expenses/create')->assertForbidden();
+            $this->get('/transactions/create')->assertForbidden();
             $this->expectException(AuthorizationException::class);
         }
-        $created = app(ExpenseService::class)->create($actor, $this->data());
+        $created = app(TransactionService::class)->create($actor, $this->data());
         $this->assertSame(12501, $created->amount_millimes);
         $this->assertSame($actor->id, $created->created_by);
     }
@@ -87,46 +143,46 @@ class ExpenseManagementTest extends TestCase
     public function test_update_and_delete_permissions_are_enforced_on_fresh_records(string $role, bool $own, bool $allowed): void
     {
         $actor = $this->login($role);
-        $expense = Expense::factory()->create(['created_by' => $own ? $actor->id : User::factory()->create()->id]);
+        $transaction = Transaction::factory()->create(['created_by' => $own ? $actor->id : User::factory()->create()->id]);
         if (! $allowed) {
-            $this->get('/expenses/'.$expense->id.'/edit')->assertForbidden();
+            $this->get('/transactions/'.$transaction->id.'/edit')->assertForbidden();
             foreach (['update', 'delete'] as $action) {
                 try {
-                    $service = app(ExpenseService::class);
-                    $action === 'update' ? $service->update($actor, $expense, $this->data($expense->category)) : $service->delete($actor, $expense);
+                    $service = app(TransactionService::class);
+                    $action === 'update' ? $service->update($actor, $transaction, $this->data($transaction->category)) : $service->delete($actor, $transaction);
                     $this->fail('Unauthorized write was accepted.');
                 } catch (AuthorizationException) {
-                    $this->assertDatabaseHas('expenses', ['id' => $expense->id]);
+                    $this->assertDatabaseHas('transactions', ['id' => $transaction->id]);
                 }
             }
 
             return;
         }
-        $this->get('/expenses/'.$expense->id.'/edit')->assertOk();
-        app(ExpenseService::class)->update($actor, $expense, $this->data($expense->category));
-        $this->assertSame(12501, $expense->fresh()->amount_millimes);
-        app(ExpenseService::class)->delete($actor, $expense);
-        $this->assertDatabaseMissing('expenses', ['id' => $expense->id]);
+        $this->get('/transactions/'.$transaction->id.'/edit')->assertOk();
+        app(TransactionService::class)->update($actor, $transaction, $this->data($transaction->category));
+        $this->assertSame(12501, $transaction->fresh()->amount_millimes);
+        app(TransactionService::class)->delete($actor, $transaction);
+        $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
     }
 
     public function test_real_resource_pages_save_exact_amounts_and_ignore_protected_fields(): void
     {
         $actor = $this->login('editor');
         $data = $this->data();
-        Livewire::test(CreateExpense::class)->fillForm($data)
+        Livewire::test(CreateTransaction::class)->fillForm($data)
             ->set('data.created_by', User::factory()->create()->id)->set('data.amount_millimes', 1)
             ->set('data.id', 99999)->set('data.deleted_at', now()->toISOString())->call('create')->assertHasNoFormErrors();
-        $expense = Expense::query()->sole();
-        $this->assertSame(12501, $expense->amount_millimes);
-        $this->assertSame($actor->id, $expense->created_by);
-        $this->assertNotSame(99999, $expense->id);
-        Livewire::test(EditExpense::class, ['record' => $expense->id])->assertFormSet(['amount' => '12,501'])
+        $transaction = Transaction::query()->sole();
+        $this->assertSame(12501, $transaction->amount_millimes);
+        $this->assertSame($actor->id, $transaction->created_by);
+        $this->assertNotSame(99999, $transaction->id);
+        Livewire::test(EditTransaction::class, ['record' => $transaction->id])->assertFormSet(['amount' => '12,501'])
             ->fillForm([...$data, 'amount' => '999999999.999'])->set('data.created_by', 99999)
             ->call('save')->assertHasNoFormErrors();
-        $this->assertSame(999999999999, $expense->fresh()->amount_millimes);
-        $this->assertSame($actor->id, $expense->fresh()->created_by);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'expense.created', 'actor_id' => $actor->id, 'subject_type' => Expense::class, 'subject_id' => (string) $expense->id]);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'expense.updated']);
+        $this->assertSame(999999999999, $transaction->fresh()->amount_millimes);
+        $this->assertSame($actor->id, $transaction->fresh()->created_by);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'transaction.created', 'actor_id' => $actor->id, 'subject_type' => Transaction::class, 'subject_id' => (string) $transaction->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'transaction.updated']);
         $this->assertSame([], AuditLog::query()->first()->metadata);
     }
 
@@ -134,10 +190,10 @@ class ExpenseManagementTest extends TestCase
     {
         $this->login();
         $data = $this->data();
-        foreach ([['amount', '1e3'], ['amount', 12.5], ['amount', '0'], ['amount', '1.0001'], ['expense_date', '2026-02-30'], ['description', str_repeat('a', 5001)]] as [$key, $value]) {
-            Livewire::test(CreateExpense::class)->fillForm([...$data, $key => $value])->call('create')->assertHasFormErrors([$key]);
+        foreach ([['amount', '1e3'], ['amount', 12.5], ['amount', '0'], ['amount', '1.0001'], ['transaction_date', '2026-02-30'], ['description', str_repeat('a', 5001)]] as [$key, $value]) {
+            Livewire::test(CreateTransaction::class)->fillForm([...$data, $key => $value])->call('create')->assertHasFormErrors([$key]);
         }
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
     }
 
     public function test_disabled_category_can_be_kept_but_cannot_be_newly_selected(): void
@@ -145,11 +201,11 @@ class ExpenseManagementTest extends TestCase
         $actor = $this->login();
         $old = Category::factory()->create(['is_active' => false]);
         $other = Category::factory()->create(['is_active' => false]);
-        $expense = Expense::factory()->create(['category_id' => $old->id]);
-        Livewire::test(EditExpense::class, ['record' => $expense->id])->fillForm($this->data($old))->call('save')->assertHasNoFormErrors();
-        foreach ([null, $expense] as $record) {
+        $transaction = Transaction::factory()->create(['category_id' => $old->id]);
+        Livewire::test(EditTransaction::class, ['record' => $transaction->id])->fillForm($this->data($old))->call('save')->assertHasNoFormErrors();
+        foreach ([null, $transaction] as $record) {
             try {
-                $service = app(ExpenseService::class);
+                $service = app(TransactionService::class);
                 $record ? $service->update($actor, $record, $this->data($other)) : $service->create($actor, $this->data($old));
                 $this->fail('Disabled category was accepted.');
             } catch (ValidationException $exception) {
@@ -162,30 +218,30 @@ class ExpenseManagementTest extends TestCase
     {
         $actor = $this->login();
         $data = $this->data();
-        $page = Livewire::test(CreateExpense::class)->fillForm($data);
+        $page = Livewire::test(CreateTransaction::class)->fillForm($data);
         Category::query()->whereKey($data['category_id'])->update(['is_active' => false]);
         $page->call('create')->assertHasFormErrors(['category_id']);
         try {
-            app(ExpenseService::class)->create($actor, $data);
+            app(TransactionService::class)->create($actor, $data);
             $this->fail('Stale category selection was accepted.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('category_id', $exception->errors());
         }
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
     }
 
     public function test_permanent_delete_removes_expense_attachment_rows_and_delivery_routes(): void
     {
         $actor = $this->login();
-        $expense = Expense::factory()->create();
-        $attachment = Attachment::factory()->create(['expense_id' => $expense->id]);
-        Livewire::test(ViewExpense::class, ['record' => $expense->id])->callAction('delete')->assertRedirect('/expenses');
-        $this->get('/expenses/'.$expense->id)->assertNotFound();
-        $this->get('/expenses/'.$expense->id.'/edit')->assertNotFound();
-        Livewire::test(ListExpenses::class)->assertCanNotSeeTableRecords([$expense]);
+        $transaction = Transaction::factory()->create();
+        $attachment = Attachment::factory()->create(['transaction_id' => $transaction->id]);
+        Livewire::test(ViewTransaction::class, ['record' => $transaction->id])->callAction('delete')->assertRedirect('/transactions');
+        $this->get('/transactions/'.$transaction->id)->assertNotFound();
+        $this->get('/transactions/'.$transaction->id.'/edit')->assertNotFound();
+        Livewire::test(ListTransactions::class)->assertCanNotSeeTableRecords([$transaction]);
         $this->assertDatabaseMissing('attachments', ['id' => $attachment->id]);
-        $this->assertDatabaseMissing('expenses', ['id' => $expense->id]);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'expense.deleted', 'actor_id' => $actor->id]);
+        $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'transaction.deleted', 'actor_id' => $actor->id]);
     }
 
     public function test_search_filters_sort_and_pagination_include_shared_records(): void
@@ -193,20 +249,20 @@ class ExpenseManagementTest extends TestCase
         $this->login();
         $category = Category::factory()->create(['name' => 'Matériel médical']);
         $creator = User::factory()->create(['name' => 'Docteur Martin']);
-        $first = Expense::factory()->create(['expense_date' => '2026-11-01', 'category_id' => $category->id, 'created_by' => $creator->id, 'amount_millimes' => 1001, 'description' => 'Achat de référence']);
-        $second = Expense::factory()->create(['expense_date' => '2026-11-30', 'amount_millimes' => 9000]);
-        $deleted = Expense::factory()->create();
+        $first = Transaction::factory()->create(['type' => 'expense', 'transaction_date' => '2026-11-01', 'category_id' => $category->id, 'created_by' => $creator->id, 'amount_millimes' => 1001, 'description' => 'Achat de référence']);
+        $second = Transaction::factory()->create(['type' => 'expense', 'transaction_date' => '2026-11-30', 'amount_millimes' => 9000]);
+        $deleted = Transaction::factory()->create();
         $deleted->delete();
-        Livewire::test(ListExpenses::class)->assertCanSeeTableRecords([$second, $first], inOrder: true)->assertCanNotSeeTableRecords([$deleted])
+        Livewire::test(ListTransactions::class)->assertCanSeeTableRecords([$second, $first], inOrder: true)->assertCanNotSeeTableRecords([$deleted])
             ->searchTable('référence')->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
-        Livewire::test(ListExpenses::class)->searchTable('Matériel médical')->assertCanSeeTableRecords([$first]);
-        Livewire::test(ListExpenses::class)->searchTable('Docteur Martin')->assertCanSeeTableRecords([$first]);
-        Livewire::test(ListExpenses::class)->filterTable('category_id', $category->id)->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
-        Livewire::test(ListExpenses::class)->filterTable('created_by', $creator->id)->assertCanNotSeeTableRecords([$second]);
-        Livewire::test(ListExpenses::class)->filterTable('period', ['from' => '2026-11-01', 'until' => '2026-11-01'])->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
-        Livewire::test(ListExpenses::class)->sortTable('amount_millimes', 'asc')->assertCanSeeTableRecords([$first, $second], inOrder: true);
-        Expense::factory()->count(12)->create(['expense_date' => '2026-12-01']);
-        $page = Livewire::test(ListExpenses::class);
+        Livewire::test(ListTransactions::class)->searchTable('Matériel médical')->assertCanSeeTableRecords([$first]);
+        Livewire::test(ListTransactions::class)->searchTable('Docteur Martin')->assertCanSeeTableRecords([$first]);
+        Livewire::test(ListTransactions::class)->filterTable('category_id', $category->id)->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
+        Livewire::test(ListTransactions::class)->filterTable('created_by', $creator->id)->assertCanNotSeeTableRecords([$second]);
+        Livewire::test(ListTransactions::class)->filterTable('period', ['from' => '2026-11-01', 'until' => '2026-11-01'])->assertCanSeeTableRecords([$first])->assertCanNotSeeTableRecords([$second]);
+        Livewire::test(ListTransactions::class)->sortTable('amount_millimes', 'asc')->assertCanSeeTableRecords([$second, $first], inOrder: true);
+        Transaction::factory()->count(12)->create(['type' => 'expense', 'transaction_date' => '2026-12-01']);
+        $page = Livewire::test(ListTransactions::class);
         $this->assertCount(10, $page->instance()->getTableRecords());
         $page->call('gotoPage', 2);
         $this->assertCount(4, $page->instance()->getTableRecords());
@@ -218,10 +274,10 @@ class ExpenseManagementTest extends TestCase
         $data = $this->data();
         Event::listen('eloquent.creating: '.AuditLog::class, fn () => throw new RuntimeException('Synthetic audit failure'));
         try {
-            app(ExpenseService::class)->create($actor, $data);
+            app(TransactionService::class)->create($actor, $data);
             $this->fail('Expected audit failure.');
         } catch (RuntimeException) {
-            $this->assertDatabaseCount('expenses', 0);
+            $this->assertDatabaseCount('transactions', 0);
             $this->assertDatabaseCount('audit_logs', 0);
         }
     }
@@ -229,10 +285,10 @@ class ExpenseManagementTest extends TestCase
     public function test_revoked_livewire_form_cannot_write(): void
     {
         $actor = $this->login('editor');
-        $page = Livewire::test(CreateExpense::class)->fillForm($this->data());
+        $page = Livewire::test(CreateTransaction::class)->fillForm($this->data());
         app(AccountService::class)->disable($actor);
         $page->call('create')->assertForbidden();
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
     }
 
     #[DataProvider('roles')]
@@ -277,13 +333,13 @@ class ExpenseManagementTest extends TestCase
     public function test_navigation_actions_cannot_be_invoked_as_unaudited_mutations(): void
     {
         $this->login();
-        $expense = Expense::factory()->create(['description' => 'Original']);
-        $category = $expense->category;
-        Livewire::test(ListExpenses::class)->callAction(TestAction::make('edit')->table($expense), data: $this->data($category));
-        Livewire::test(ViewExpense::class, ['record' => $expense->id])->callAction('edit', data: $this->data($category));
+        $transaction = Transaction::factory()->create(['description' => 'Original']);
+        $category = $transaction->category;
+        Livewire::test(ListTransactions::class)->callAction(TestAction::make('edit')->table($transaction), data: $this->data($category));
+        Livewire::test(ViewTransaction::class, ['record' => $transaction->id])->callAction('edit', data: $this->data($category));
         Livewire::test(ListCategories::class)->callAction(TestAction::make('edit')->table($category), data: ['name' => 'Forged']);
         Livewire::test(ListCategories::class)->callAction('create', data: ['name' => 'Forged create']);
-        $this->assertSame('Original', $expense->fresh()->description);
+        $this->assertSame('Original', $transaction->fresh()->description);
         $this->assertSame($category->name, $category->fresh()->name);
         $this->assertDatabaseCount('categories', 1);
         $this->assertDatabaseCount('audit_logs', 0);
@@ -292,17 +348,17 @@ class ExpenseManagementTest extends TestCase
     public function test_date_filters_validate_before_applying_and_reject_forged_applied_values(): void
     {
         $this->login();
-        $expense = Expense::factory()->create(['expense_date' => '2026-11-12']);
-        Livewire::test(ListExpenses::class)
+        $transaction = Transaction::factory()->create(['type' => 'expense', 'transaction_date' => '2026-11-12']);
+        Livewire::test(ListTransactions::class)
             ->set('tableDeferredFilters.period', ['from' => '2026-11-30', 'until' => '2026-11-01'])
             ->call('applyTableFilters')->assertHasErrors(['tableDeferredFilters.period.until']);
-        Livewire::test(ListExpenses::class)->filterTable('period', ['from' => "2026-11-12' OR 1=1 --"])
-            ->assertCanNotSeeTableRecords([$expense]);
-        Livewire::test(ListExpenses::class)->filterTable('period', ['from' => ['forged'], 'until' => ['forged']])
-            ->assertCanNotSeeTableRecords([$expense]);
-        Livewire::test(ListExpenses::class)
+        Livewire::test(ListTransactions::class)->filterTable('period', ['from' => "2026-11-12' OR 1=1 --"])
+            ->assertCanNotSeeTableRecords([$transaction]);
+        Livewire::test(ListTransactions::class)->filterTable('period', ['from' => ['forged'], 'until' => ['forged']])
+            ->assertCanNotSeeTableRecords([$transaction]);
+        Livewire::test(ListTransactions::class)
             ->set('tableDeferredFilters.period', ['from' => null, 'until' => '2026-11-12'])
-            ->call('applyTableFilters')->assertHasNoErrors()->assertCanSeeTableRecords([$expense]);
+            ->call('applyTableFilters')->assertHasNoErrors()->assertCanSeeTableRecords([$transaction]);
     }
 
     public function test_sqlite_snapshot_retry_rechecks_a_concurrently_disabled_category(): void
@@ -311,19 +367,19 @@ class ExpenseManagementTest extends TestCase
         $data = $this->data();
         config(['database.connections.racer' => config('database.connections.sqlite')]);
         $raced = false;
-        Event::listen('eloquent.creating: '.Expense::class, function () use ($data, &$raced): void {
+        Event::listen('eloquent.creating: '.Transaction::class, function () use ($data, &$raced): void {
             if (! $raced) {
                 $raced = true;
                 DB::connection('racer')->table('categories')->where('id', $data['category_id'])->update(['is_active' => false]);
             }
         });
         try {
-            app(ExpenseService::class)->create($actor, $data);
+            app(TransactionService::class)->create($actor, $data);
             $this->fail('A concurrently disabled category was accepted.');
         } catch (ValidationException $exception) {
             $this->assertTrue($raced);
             $this->assertArrayHasKey('category_id', $exception->errors());
-            $this->assertDatabaseCount('expenses', 0);
+            $this->assertDatabaseCount('transactions', 0);
             $this->assertDatabaseCount('audit_logs', 0);
         }
     }
@@ -332,10 +388,10 @@ class ExpenseManagementTest extends TestCase
     {
         $actor = $this->login();
         $data = $this->data();
-        config(['expenses.max_amount_millimes' => 1000]);
-        Livewire::test(CreateExpense::class)->fillForm($data)->call('create')->assertHasFormErrors(['amount']);
+        config(['transactions.max_amount_millimes' => 1000]);
+        Livewire::test(CreateTransaction::class)->fillForm($data)->call('create')->assertHasFormErrors(['amount']);
         try {
-            app(ExpenseService::class)->create($actor, $data);
+            app(TransactionService::class)->create($actor, $data);
             $this->fail('Configured maximum was ignored.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('amount', $exception->errors());
@@ -360,7 +416,7 @@ class ExpenseManagementTest extends TestCase
         $actor = $this->login();
         $unused = Category::factory()->create();
         $used = Category::factory()->create();
-        Expense::factory()->create(['category_id' => $used->id]);
+        Transaction::factory()->create(['category_id' => $used->id]);
         Livewire::test(ListCategories::class)
             ->assertTableActionVisible('delete', $unused)->assertTableActionHidden('delete', $used)
             ->callAction(TestAction::make('delete')->table($unused))->assertHasNoActionErrors();
@@ -377,7 +433,7 @@ class ExpenseManagementTest extends TestCase
     {
         $actor = $this->login();
         $category = Category::factory()->create();
-        Expense::factory()->create(['category_id' => $category->id]);
+        Transaction::factory()->create(['category_id' => $category->id]);
         try {
             app(CategoryService::class)->delete($actor, $category);
             $this->fail('Referenced category deleted.');
@@ -396,8 +452,8 @@ class ExpenseManagementTest extends TestCase
         Event::listen('eloquent.creating: '.AuditLog::class, function (AuditLog $audit) use ($actor, $category, &$raced): void {
             if ($audit->action === 'category.deleted' && ! $raced) {
                 $raced = true;
-                DB::connection('racer')->table('expenses')->insert([
-                    'expense_date' => '2026-11-13', 'amount_millimes' => 1000,
+                DB::connection('racer')->table('transactions')->insert([
+                    'type' => 'expense', 'transaction_date' => '2026-11-13', 'amount_millimes' => 1000,
                     'category_id' => $category->id, 'created_by' => $actor->id,
                     'created_at' => now(), 'updated_at' => now(),
                 ]);
@@ -410,7 +466,7 @@ class ExpenseManagementTest extends TestCase
             $this->assertTrue($raced);
         }
         $this->assertDatabaseHas('categories', ['id' => $category->id]);
-        $this->assertDatabaseHas('expenses', ['category_id' => $category->id]);
+        $this->assertDatabaseHas('transactions', ['category_id' => $category->id]);
         $this->assertDatabaseMissing('audit_logs', ['action' => 'category.deleted']);
     }
 
@@ -418,14 +474,14 @@ class ExpenseManagementTest extends TestCase
     {
         $actor = $this->login('editor');
         $data = $this->data();
-        $page = Livewire::test(CreateExpense::class)->fillForm($data)->call('createAnother')
+        $page = Livewire::test(CreateTransaction::class)->fillForm($data)->call('createAnother')
             ->assertHasNoFormErrors()->assertFormSet(['amount' => '', 'category_id' => null, 'description' => null]);
-        $this->assertDatabaseHas('expenses', ['amount_millimes' => 12501, 'created_by' => $actor->id]);
+        $this->assertDatabaseHas('transactions', ['amount_millimes' => 12501, 'created_by' => $actor->id]);
         $page->call('createAnother')->assertHasFormErrors(['amount', 'category_id']);
-        $this->assertDatabaseCount('expenses', 1);
+        $this->assertDatabaseCount('transactions', 1);
         $page->fillForm([...$data, 'amount' => '1,125'])->call('createAnother')
             ->assertHasNoFormErrors()->assertFormSet(['amount' => '']);
-        $this->assertDatabaseCount('expenses', 2);
-        $this->assertDatabaseHas('expenses', ['amount_millimes' => 1125, 'created_by' => $actor->id]);
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertDatabaseHas('transactions', ['amount_millimes' => 1125, 'created_by' => $actor->id]);
     }
 }

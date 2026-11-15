@@ -3,10 +3,10 @@
 // Disposable concurrency worker: never loads the owner's local database or storage.
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountSessions;
-use App\Services\ExpenseService;
+use App\Services\TransactionService;
 use App\Support\TestIsolation;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\UploadedFile;
@@ -33,11 +33,11 @@ $job = json_decode(file_get_contents($jobPath), true, flags: JSON_THROW_ON_ERROR
 $actor = User::query()->findOrFail($job['actor']);
 auth()->login($actor);
 app(AccountSessions::class)->establish($actor, true);
-config(['expenses.attachments.count' => $job['count'], 'expenses.attachments.total_bytes' => $job['total']]);
+config(['transactions.attachments.count' => $job['count'], 'transactions.attachments.total_bytes' => $job['total']]);
 file_put_contents($jobPath.'.ready', 'ready');
 try {
-    app(ExpenseService::class)->update($actor, Expense::query()->findOrFail($job['expense']), [
-        'expense_date' => '2026-11-13', 'amount' => '1', 'category_id' => $job['category'],
+    app(TransactionService::class)->update($actor, Transaction::query()->findOrFail($job['expense']), [
+        'type' => 'expense', 'transaction_date' => '2026-11-13', 'amount' => '1', 'category_id' => $job['category'],
         'new_attachments' => [new UploadedFile($job['upload'], 'receipt.png', test: true)],
     ]);
     echo 'accepted';

@@ -26,7 +26,6 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
-use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -68,7 +67,7 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('/setup/password', Password::class)->name('setup.password');
                 Route::get('/setup/complete', Complete::class)->name('setup.complete');
             })
-            ->brandName('ProxyMed — Dépenses')
+            ->brandName('ProxyMed — Transactions')
             ->brandLogo(fn () => view('components.brand'))
             ->brandLogoHeight('3rem')
             ->viteTheme('resources/css/filament/admin/theme.css')
@@ -83,9 +82,6 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([
-                AccountWidget::class,
-            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

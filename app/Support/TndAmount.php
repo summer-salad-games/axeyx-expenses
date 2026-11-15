@@ -39,8 +39,11 @@ final class TndAmount
 
     public static function format(int $millimes): string
     {
-        [$whole, $fraction] = explode(',', self::decimal($millimes));
+        $digits = ltrim((string) $millimes, '-');
+        $digits = str_pad($digits, 4, '0', STR_PAD_LEFT);
+        $whole = substr($digits, 0, -3);
+        $fraction = substr($digits, -3);
 
-        return preg_replace('/\B(?=(\d{3})+(?!\d))/', "\u{202F}", $whole).','.$fraction.' TND';
+        return ($millimes < 0 ? '−' : '').preg_replace('/\B(?=(\d{3})+(?!\d))/', "\u{202F}", $whole).','.$fraction.' TND';
     }
 }

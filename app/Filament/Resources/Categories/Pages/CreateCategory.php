@@ -22,6 +22,6 @@ class CreateCategory extends CreateRecord
 
     protected function getRedirectUrl(): string
     {
-        return CategoryResource::getUrl();
+        return CategoryResource::getUrl('index');
     }
 }

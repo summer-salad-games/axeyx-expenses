@@ -24,10 +24,10 @@ abstract class AccountCommand extends Command
                 $this->error($message);
             }
         } catch (ModelNotFoundException) {
-            $this->error('Utilisateur introuvable.');
+            $this->error('User not found.');
         } catch (QueryException) {
             // Never print SQL, bindings or credential-bearing exception context.
-            $this->error('La modification a échoué. Vérifiez la disponibilité de la base et les données du compte.');
+            $this->error('The change failed. Check database availability and account data.');
         }
 
         return self::FAILURE;
@@ -37,7 +37,7 @@ abstract class AccountCommand extends Command
     {
         $role = Role::tryFrom($value);
         if (! $role) {
-            throw ValidationException::withMessages(['role' => 'Rôle invalide : administrator, editor ou viewer.']);
+            throw ValidationException::withMessages(['role' => 'Invalid role: administrator, editor or viewer.']);
         }
 
         return $role;
@@ -47,8 +47,8 @@ abstract class AccountCommand extends Command
     protected function passwordInput(): array
     {
         return [
-            (string) $this->secret('Mot de passe', fallback: false),
-            (string) $this->secret('Confirmez le mot de passe', fallback: false),
+            (string) $this->secret('Password', fallback: false),
+            (string) $this->secret('Confirm password', fallback: false),
         ];
     }
 }

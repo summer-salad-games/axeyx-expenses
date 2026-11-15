@@ -26,7 +26,7 @@ final class AccountService
             : User::query()->where('email', mb_strtolower($identifier, 'UTF-8'))->first();
 
         if (! $user) {
-            throw ValidationException::withMessages(['user' => 'Utilisateur introuvable.']);
+            throw ValidationException::withMessages(['user' => 'User not found.']);
         }
 
         return $user;

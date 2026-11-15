@@ -3,6 +3,7 @@
 return [
     'reporting_timezone' => env('REPORTING_TIMEZONE', 'Europe/Luxembourg'),
     'max_amount_millimes' => 999999999999,
+    'statistics' => ['max_months' => 120],
     'attachments' => [
         'count' => 10,
         'file_bytes' => 10 * 1024 * 1024,

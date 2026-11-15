@@ -8,9 +8,9 @@ use App\Services\AccountService;
 
 class ChangeAccountPassword extends AccountCommand
 {
-    protected $signature = 'accounts:password {user : ID ou adresse e-mail}';
+    protected $signature = 'accounts:password {user : Account ID or email address}';
 
-    protected $description = 'Changer le mot de passe par saisie masquée et révoquer les sessions';
+    protected $description = 'Set a temporary password using hidden prompts and revoke sessions';
 
     public function handle(AccountService $accounts): int
     {
@@ -18,7 +18,7 @@ class ChangeAccountPassword extends AccountCommand
             $user = $accounts->resolveUser((string) $this->argument('user'));
             [$password, $confirmation] = $this->passwordInput();
             $accounts->changePassword($user, $password, $confirmation);
-            $this->info('Mot de passe temporaire défini ; sessions révoquées. L’utilisateur devra choisir un nouveau mot de passe à sa prochaine connexion.');
+            $this->info('Temporary password set; sessions revoked. The user must choose a new password at their next login.');
         });
     }
 }

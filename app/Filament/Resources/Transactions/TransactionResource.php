@@ -1,16 +1,17 @@
 <?php
 
-namespace App\Filament\Resources\Expenses;
+namespace App\Filament\Resources\Transactions;
 
-use App\Filament\Resources\Expenses\Pages\CreateExpense;
-use App\Filament\Resources\Expenses\Pages\EditExpense;
-use App\Filament\Resources\Expenses\Pages\ListExpenses;
-use App\Filament\Resources\Expenses\Pages\ViewExpense;
+use App\Enums\TransactionType;
+use App\Filament\Resources\Transactions\Pages\CreateTransaction;
+use App\Filament\Resources\Transactions\Pages\EditTransaction;
+use App\Filament\Resources\Transactions\Pages\ListTransactions;
+use App\Filament\Resources\Transactions\Pages\ViewTransaction;
 use App\Models\Category;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Rules\TndAmountRule;
-use App\Services\ExpenseService;
+use App\Services\TransactionService;
 use App\Support\TndAmount;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -24,6 +25,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -33,17 +36,17 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Validator;
 
-class ExpenseResource extends Resource
+class TransactionResource extends Resource
 {
-    protected static ?string $model = Expense::class;
+    protected static ?string $model = Transaction::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
-    protected static ?string $modelLabel = 'dépense';
+    protected static ?string $modelLabel = 'transaction';
 
-    protected static ?string $pluralModelLabel = 'Dépenses';
+    protected static ?string $pluralModelLabel = 'Transactions';
 
-    protected static ?string $slug = 'expenses';
+    protected static ?string $slug = 'transactions';
 
     protected static ?int $navigationSort = 10;
 
@@ -52,9 +55,10 @@ class ExpenseResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->columns(2)->components([
-            DatePicker::make('expense_date')->label('Date de la dépense')->native()->required()
-                ->default(fn () => now(config('expenses.reporting_timezone'))->toDateString()),
+            Select::make('type')->label('Type')->options(TransactionType::options())->searchable()->native(false)->required()
+                ->default('expense')->live()->afterStateUpdated(fn (Set $set) => $set('category_id', null)),
             TextInput::make('amount')->label('Montant')->inputMode('decimal')->suffix('TND')->required()
+                ->prefix(fn (Get $get) => self::selectedType($get('type'))?->sign())
                 ->default('')->placeholder('0,000')
                 ->extraAlpineAttributes([
                     'x-on:focus' => '$el.select()',
@@ -86,52 +90,59 @@ class ExpenseResource extends Resource
                 ])
                 ->rules([new TndAmountRule])->helperText('Virgule ou point, jusqu’à trois décimales.'),
             Select::make('category_id')->label('Catégorie')->required()->searchable()->native(false)
-                ->options(fn (?Expense $record) => Category::query()->where(function (Builder $query) use ($record): void {
-                    $query->where('is_active', true);
-                    if ($record) {
-                        $query->orWhereKey($record->category_id);
-                    }
-                })->orderBy('name')->get()->mapWithKeys(fn (Category $category) => [
-                    $category->id => $category->name.($category->is_active ? '' : ' (désactivée)'),
-                ])->all())
-                ->helperText(fn () => Category::query()->where('is_active', true)->exists()
-                    ? null : 'Aucune catégorie active. Contactez un administrateur.'),
+                ->options(fn (?Transaction $record, Get $get) => Category::query()->where('type', self::selectedType($get('type'))?->value)
+                    ->where(function (Builder $query) use ($record): void {
+                        $query->where('is_active', true);
+                        if ($record) {
+                            $query->orWhereKey($record->category_id);
+                        }
+                    })->orderBy('name')->get()->mapWithKeys(fn (Category $category) => [
+                        $category->id => $category->name.($category->is_active ? '' : ' (désactivée)'),
+                    ])->all())
+                ->helperText(fn (Get $get) => Category::query()->where('type', self::selectedType($get('type'))?->value)->where('is_active', true)->exists()
+                        ? null : 'Aucune catégorie active. Contactez un administrateur.'),
+            DatePicker::make('transaction_date')->label('Date de la transaction')->native()->required()
+                ->default(fn () => now(config('transactions.reporting_timezone'))->toDateString()),
             Textarea::make('description')->label('Description')->maxLength(5000)->rows(4)->columnSpanFull(),
             FileUpload::make('new_attachments')->label('Ajouter des pièces jointes')->multiple()->storeFiles(false)
                 ->disk('local')->visibility('private')->maxParallelUploads(1)
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
-                ->maxSize(fn () => intdiv(config('expenses.attachments.file_bytes'), 1024))
-                ->maxFiles(fn () => config('expenses.attachments.count'))->previewable(false)->columnSpanFull()
-                ->helperText(fn () => 'JPEG, PNG, WebP ou PDF. '.config('expenses.attachments.count').' fichiers maximum, '
-                    .intdiv(config('expenses.attachments.file_bytes'), 1048576).' Mio par fichier, '
-                    .intdiv(config('expenses.attachments.total_bytes'), 1048576).' Mio au total. Images : 16 mégapixels maximum. Les fichiers existants sont conservés.'),
+                ->maxSize(fn () => intdiv(config('transactions.attachments.file_bytes'), 1024))
+                ->maxFiles(fn () => config('transactions.attachments.count'))->previewable(false)->columnSpanFull()
+                ->helperText(fn () => 'JPEG, PNG, WebP ou PDF. '.config('transactions.attachments.count').' fichiers maximum, '
+                        .intdiv(config('transactions.attachments.file_bytes'), 1048576).' Mio par fichier, '
+                        .intdiv(config('transactions.attachments.total_bytes'), 1048576).' Mio au total. Images : 16 mégapixels maximum. Les fichiers existants sont conservés.'),
         ]);
     }
 
     public static function infolist(Schema $schema): Schema
     {
         return $schema->columns(2)->components([
-            TextEntry::make('expense_date')->label('Date de la dépense')->date('d/m/Y'),
-            TextEntry::make('amount_millimes')->label('Montant')->formatStateUsing(fn (int $state) => TndAmount::format($state)),
+            TextEntry::make('type')->label('Type')->formatStateUsing(fn (TransactionType $state) => $state->label())->badge()->color(fn (TransactionType $state) => $state->color()),
+            TextEntry::make('transaction_date')->label('Date de la transaction')->date('d/m/Y'),
+            TextEntry::make('amount_millimes')->label('Montant')->formatStateUsing(fn (int $state, Transaction $record) => $record->type->sign().TndAmount::format($state)),
             TextEntry::make('category.name')->label('Catégorie'),
             TextEntry::make('creator.name')->label('Créée par'),
-            TextEntry::make('description')->label('Description')->placeholder('Aucune description')->columnSpanFull(),
-            TextEntry::make('created_at')->label('Créée le')->dateTime('d/m/Y H:i', timezone: config('expenses.reporting_timezone')),
-            TextEntry::make('updated_at')->label('Modifiée le')->dateTime('d/m/Y H:i', timezone: config('expenses.reporting_timezone')),
+            TextEntry::make('description')->label('Description')->placeholder('Aucune description'),
+            TextEntry::make('created_at')->label('Créée le')->dateTime('d/m/Y H:i', timezone: config('transactions.reporting_timezone')),
+            TextEntry::make('updated_at')->label('Modifiée le')->dateTime('d/m/Y H:i', timezone: config('transactions.reporting_timezone')),
         ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('expense_date')->label('Date')->date('d/m/Y')->sortable(),
-            TextColumn::make('amount_millimes')->label('Montant')->formatStateUsing(fn (int $state) => TndAmount::format($state))->sortable(),
+            TextColumn::make('type')->label('Type')->formatStateUsing(fn (TransactionType $state) => $state->label())->badge()->color(fn (TransactionType $state) => $state->color()),
+            TextColumn::make('transaction_date')->label('Date')->date('d/m/Y')->sortable(),
+            TextColumn::make('amount_millimes')->label('Montant')->formatStateUsing(fn (int $state, Transaction $record) => $record->type->sign().TndAmount::format($state))
+                ->sortable(query: fn (Builder $query, string $direction) => $query->orderByRaw("CASE WHEN type = 'expense' THEN -amount_millimes ELSE amount_millimes END ".($direction === 'desc' ? 'DESC' : 'ASC'))),
             TextColumn::make('category.name')->label('Catégorie')->searchable()->sortable()->wrap(),
             TextColumn::make('creator.name')->label('Créée par')->searchable()->sortable(),
             TextColumn::make('description')->label('Description')->searchable()->limit(20)->toggleable(isToggledHiddenByDefault: true),
         ])->filters([
+            SelectFilter::make('type')->label('Type')->options(TransactionType::options())->searchable()->native(false),
             SelectFilter::make('category_id')->label('Catégorie')->searchable()->preload()->native(false)
-                ->options(fn () => Category::query()->orderBy('name')->pluck('name', 'id')),
+                ->options(fn () => Category::query()->orderBy('name')->get()->mapWithKeys(fn (Category $category) => [$category->id => $category->name.' — '.$category->type->label()])),
             SelectFilter::make('created_by')->label('Créée par')->searchable()->preload()->native(false)
                 ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id')),
             Filter::make('period')->label('Période')->schema([
@@ -144,8 +155,8 @@ class ExpenseResource extends Resource
                     return $query->whereRaw('0 = 1');
                 }
 
-                return $query->when($values['from'] ?? null, fn (Builder $query, string $date) => $query->where('expense_date', '>=', $date))
-                    ->when($values['until'] ?? null, fn (Builder $query, string $date) => $query->where('expense_date', '<=', $date));
+                return $query->when($values['from'] ?? null, fn (Builder $query, string $date) => $query->where('transaction_date', '>=', $date))
+                    ->when($values['until'] ?? null, fn (Builder $query, string $date) => $query->where('transaction_date', '<=', $date));
             })->indicateUsing(function (array $data): array {
                 $values = self::periodData($data);
 
@@ -155,9 +166,9 @@ class ExpenseResource extends Resource
                 ]);
             }),
         ])->recordActions([ViewAction::make(), EditAction::make()->action(null), self::deleteAction()])
-            ->defaultSort(fn (Builder $query) => $query->orderByDesc('expense_date')->orderByDesc('id'))
+            ->defaultSort(fn (Builder $query) => $query->orderByDesc('transaction_date')->orderByDesc('id'))
             ->stackedOnMobile()->paginationPageOptions([10, 25, 50])->defaultPaginationPageOption(10)
-            ->emptyStateHeading('Aucune dépense')->emptyStateDescription('Les dépenses enregistrées apparaîtront ici.');
+            ->emptyStateHeading('Aucune transaction')->emptyStateDescription('Les dépenses et recettes enregistrées apparaîtront ici.');
     }
 
     private static function periodData(array $data): ?array
@@ -172,10 +183,10 @@ class ExpenseResource extends Resource
 
     public static function deleteAction(): DeleteAction
     {
-        return DeleteAction::make()->authorize(fn (Expense $record) => self::canDelete($record))
-            ->modalHeading('Supprimer définitivement cette dépense ?')
-            ->modalDescription('Cette action est irréversible. La dépense et toutes ses pièces jointes seront supprimées définitivement.')
-            ->using(fn (Expense $record): bool => app(ExpenseService::class)->delete(Filament::auth()->user(), $record));
+        return DeleteAction::make()->authorize(fn (Transaction $record) => self::canDelete($record))
+            ->modalHeading('Supprimer définitivement cette transaction ?')
+            ->modalDescription('Cette action est irréversible. La transaction et toutes ses pièces jointes seront supprimées définitivement.')
+            ->using(fn (Transaction $record): bool => app(TransactionService::class)->delete(Filament::auth()->user(), $record));
     }
 
     public static function getEloquentQuery(): Builder
@@ -186,15 +197,20 @@ class ExpenseResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => ListExpenses::route('/'),
-            'create' => CreateExpense::route('/create'),
-            'view' => ViewExpense::route('/{record}'),
-            'edit' => EditExpense::route('/{record}/edit'),
+            'index' => ListTransactions::route('/'),
+            'create' => CreateTransaction::route('/create'),
+            'view' => ViewTransaction::route('/{record}'),
+            'edit' => EditTransaction::route('/{record}/edit'),
         ];
     }
 
     public static function getRelations(): array
     {
         return [RelationManagers\AttachmentsRelationManager::class];
+    }
+
+    private static function selectedType(mixed $value): ?TransactionType
+    {
+        return $value instanceof TransactionType ? $value : (is_string($value) ? TransactionType::tryFrom($value) : null);
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\Expenses\RelationManagers;
+namespace App\Filament\Resources\Transactions\RelationManagers;
 
 use App\Models\Attachment;
 use App\Services\AttachmentService;
@@ -49,10 +49,10 @@ class AttachmentsRelationManager extends RelationManager
                 ->authorize(fn (Attachment $record) => Gate::allows('view', $record))
                 ->url(fn (Attachment $record) => route('attachments.show', ['attachment' => $record, 'mode' => 'view']))->openUrlInNewTab(),
             DeleteAction::make()->label('Retirer')->modalHeading('Supprimer définitivement cette pièce jointe ?')
-                ->modalDescription('Le document sera supprimé définitivement. La dépense sera conservée.')
+                ->modalDescription('Le document sera supprimé définitivement. La transaction sera conservée.')
                 ->authorize(fn (Attachment $record) => Gate::allows('delete', $record))
                 ->using(fn (Attachment $record): bool => app(AttachmentService::class)->remove(Filament::auth()->user(), $record)),
         ])->stackedOnMobile()->paginated(false)->emptyStateHeading('Aucune pièce jointe')
-            ->emptyStateDescription('Ajoutez des documents depuis le formulaire de modification de la dépense.');
+            ->emptyStateDescription('Ajoutez des documents depuis le formulaire de modification de la transaction.');
     }
 }

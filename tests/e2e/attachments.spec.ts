@@ -41,8 +41,8 @@ test('private attachment upload, preview/download, retained edits, roles and con
     try {
         await login(editor, info.project.name, 'editor');
         await login(viewer, info.project.name, 'viewer');
-        await editor.goto('/expenses/create');
-        await editor.getByLabel('Date de la dépense', { exact: false }).fill('2026-11-13');
+        await editor.goto('/transactions/create');
+        await editor.getByLabel('Date de la transaction', { exact: false }).fill('2026-11-13');
         await editor.getByRole('textbox', { name: 'Montant', exact: false }).fill('100,125');
         await editor.getByRole('button', { name: /^Catégorie/ }).click();
         await editor.getByRole('option').first().click();
@@ -50,7 +50,7 @@ test('private attachment upload, preview/download, retained edits, roles and con
         await upload(editor, [{ name: 'reçu.png', mimeType: 'image/png', buffer: image }, { name: 'facture.pdf', mimeType: 'application/pdf', buffer: pdf() }]);
         await expect(editor.locator('.filepond--image-preview')).toHaveCount(0);
         await editor.getByRole('button', { name: 'Créer', exact: true }).click();
-        await expect(editor).toHaveURL(/\/expenses\/\d+$/);
+        await expect(editor).toHaveURL(/\/transactions\/\d+$/);
         const expense = new URL(editor.url()).pathname;
         await expect(editor.getByText('reçu.png', { exact: true })).toBeVisible();
         await expect(editor.getByText('facture.pdf', { exact: true })).toBeVisible();
@@ -109,14 +109,14 @@ test('private attachment upload, preview/download, retained edits, roles and con
         await expect(editor.getByText('reçu.png', { exact: true })).toHaveCount(0);
         expect((await viewer.request.get(downloadUrl!)).status()).toBe(404);
         await editor.getByRole('button', { name: 'Supprimer', exact: true }).click();
-        await expect(dialog.getByText('Cette action est irréversible. La dépense et toutes ses pièces jointes seront supprimées définitivement.', { exact: true })).toBeVisible();
+        await expect(dialog.getByText('Cette action est irréversible. La transaction et toutes ses pièces jointes seront supprimées définitivement.', { exact: true })).toBeVisible();
         await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
         await expect(dialog.locator('.fi-modal-window')).toBeHidden();
         await expect(editor).toHaveURL(new RegExp(`${expense}$`));
         await expect(editor.getByText('facture.pdf', { exact: true })).toBeVisible();
         await editor.getByRole('button', { name: 'Supprimer', exact: true }).click();
         await dialog.getByRole('button', { name: 'Supprimer', exact: true }).click();
-        await expect(editor).toHaveURL(/\/expenses$/);
+        await expect(editor).toHaveURL(/\/transactions$/);
         expect((await viewer.request.get(pdfUrl!)).status()).toBe(404);
         expect(errors).toEqual([]);
     } finally { await viewerContext.close(); }

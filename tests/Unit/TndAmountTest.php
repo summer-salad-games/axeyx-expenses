@@ -41,6 +41,8 @@ class TndAmountTest extends TestCase
 
     public function test_formatting_never_converts_large_integers_to_floats(): void
     {
+        $this->assertSame('−0,001 TND', TndAmount::format(-1));
+        $this->assertSame("−9\u{202F}223\u{202F}372\u{202F}036\u{202F}854\u{202F}775,808 TND", TndAmount::format(PHP_INT_MIN));
         $this->assertSame('0,000 TND', TndAmount::format(0));
         $this->assertSame('0,001 TND', TndAmount::format(1));
         $this->assertSame("999\u{202F}999\u{202F}999,999 TND", TndAmount::format(999999999999));

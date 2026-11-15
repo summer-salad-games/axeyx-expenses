@@ -2,7 +2,7 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "axeyx/expenses",
     "type": "project",
-    "description": "Registre des d\u00e9penses Axeyx",
+    "description": "ProxyMed transaction register",
     "keywords": [
         "laravel",
         "framework"
@@ -19,7 +19,6 @@
         "ext-sqlite3": "*",
         "filament/filament": "^5.11.2",
         "laravel/framework": "^13.17",
-        "laravel/reverb": "^1.0",
         "livewire/livewire": "^4.0",
         "smalot/pdfparser": "^2.13.1"
     },

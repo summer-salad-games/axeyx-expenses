@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\TransactionType;
 use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -36,12 +37,12 @@ class Category extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'type' => TransactionType::class];
     }
 
-    /** @return HasMany<Expense, $this> */
-    public function expenses(): HasMany
+    /** @return HasMany<Transaction, $this> */
+    public function transactions(): HasMany
     {
-        return $this->hasMany(Expense::class);
+        return $this->hasMany(Transaction::class);
     }
 }

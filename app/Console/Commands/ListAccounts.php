@@ -10,7 +10,7 @@ class ListAccounts extends AccountCommand
 {
     protected $signature = 'accounts:list';
 
-    protected $description = 'Lister les comptes sans afficher de secrets';
+    protected $description = 'List accounts without exposing secrets';
 
     public function handle(): int
     {
@@ -23,10 +23,10 @@ class ListAccounts extends AccountCommand
                     $user->name,
                     $user->email,
                     $user->role->value,
-                    $user->is_active ? 'oui' : 'non',
-                    $user->getAttribute('mfa_enabled') ? 'configuré' : 'à configurer',
+                    $user->is_active ? 'yes' : 'no',
+                    $user->getAttribute('mfa_enabled') ? 'configured' : 'not configured',
                 ])->all();
-            $this->table(['ID', 'Nom', 'E-mail', 'Rôle', 'Actif', 'TOTP'], $rows);
+            $this->table(['ID', 'Name', 'Email', 'Role', 'Active', 'TOTP'], $rows);
         });
     }
 }

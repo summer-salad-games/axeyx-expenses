@@ -9,16 +9,18 @@
 
 ## Implementation
 
-- Use the Laravel/Filament/Livewire/SQLite/Reverb monolith and native ARM64 deployment specified in SPEC.md. Prefer framework conventions, validated inputs, small methods, built-in components and minimal dependencies.
+- Keep all command-line tools/scripts, help, prompts, output and errors in English; the application interface remains French.
+
+- Use the Laravel/Filament/Livewire/SQLite monolith and native ARM64 deployment specified in SPEC.md. Prefer framework conventions, validated inputs, small methods, built-in components and minimal dependencies.
 - Resolve maintained stable packages compatible with the production PHP baseline; inspect uncertain hooks first. Commit Composer/npm lockfiles; never use development branches or ignore platform requirements.
-- Enforce SPEC.md's authorization matrix server-side through Policies, Filament strict authorization, Livewire actions, attachment routes and private channels.
-- All monetary arithmetic uses positive integer millimes; parse decimal strings exactly and format three places with TND. No floats. Apply required SQLite PRAGMAs on every connection, short transactions and bounded lock retries; no network I/O in transactions.
-- Protect server-owned fields, account/MFA state, private files and secrets. CLI passwords use hidden prompts. Record required audit events without credentials or document contents. Preserve file/record consistency and broadcast only after commit.
+- Enforce SPEC.md's authorization matrix server-side through Policies, Filament strict authorization, Livewire actions and attachment routes.
+- Store transaction magnitudes as positive integer millimes with an explicit expense/revenue type; compute signed net totals using integers; parse decimal strings exactly and format three places with TND. No floats. Apply required SQLite PRAGMAs on every connection, short transactions and bounded lock retries; no network I/O in transactions.
+- Protect server-owned fields, account/MFA state, private files and secrets. CLI passwords use hidden prompts. Record required audit events without credentials or document contents. Preserve file/record consistency and remove files only after commit.
 - Follow the specified coherent SQLite/attachment backup, Google Drive verification/retention, temporary cleanup and SMTP failure-alert design. Never copy a live SQLite database file or archive credentials.
 
 ## Verification
 
-- Each feature requires appropriate PHPUnit/Filament/Livewire tests and Playwright critical workflows, authorization/MFA, desktop/mobile, error/empty states and two-browser real-time/reconnection checks.
+- Each feature requires appropriate PHPUnit/Filament/Livewire tests and Playwright critical workflows, authorization/MFA, desktop/mobile, error/empty states and independent-browser/concurrent-reader-writer checks.
 - Automated tests use disposable project-local data and isolated/mock backup destinations. Never run destructive/security test suites or test uploads against production. Owner-run release checks are separate.
 - Run applicable tests, formatting, asset build and dependency audits; record actual results, failures and unverified checks in PLAN.md.
 - Production requires security-sensitive code/deployment review by a separate AI agent that did not implement the changes under review. Resolve findings and identify this accurately as AI review, not an independent human audit.

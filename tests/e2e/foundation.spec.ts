@@ -5,7 +5,7 @@ test('French login loads locally without exposing application data', async ({ pa
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('/');
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByLabel('ProxyMed — Registre des dépenses')).toBeVisible();
+    await expect(page.getByLabel('ProxyMed — Gestion des transactions')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
     await expect(page.getByRole('textbox', { name: /e-mail/i })).toBeVisible();
     await expect(page.getByLabel(/mot de passe/i).and(page.locator('input'))).toBeVisible();

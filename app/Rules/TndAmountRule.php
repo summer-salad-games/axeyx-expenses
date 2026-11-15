@@ -15,7 +15,7 @@ final class TndAmountRule implements ValidationRule
             if (! is_string($value)) {
                 throw new InvalidArgumentException('Saisissez le montant sous forme décimale.');
             }
-            TndAmount::parse($value, config('expenses.max_amount_millimes'));
+            TndAmount::parse($value, config('transactions.max_amount_millimes'));
         } catch (InvalidArgumentException $exception) {
             $fail($exception->getMessage());
         }

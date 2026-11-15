@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Storage;
 
 final class ReconcileAttachments extends Command
 {
-    protected $signature = 'attachments:reconcile {--delete : Supprimer les fichiers orphelins après le délai de grâce}';
+    protected $signature = 'attachments:reconcile {--delete : Delete orphaned files after the grace period}';
 
-    protected $description = 'Vérifier les références et nettoyer prudemment les fichiers abandonnés (simulation par défaut)';
+    protected $description = 'Verify attachment references and safely clean up abandoned files (dry run by default)';
 
     public function handle(AttachmentFiles $files, StorageConsistencyLock $lock): int
     {
@@ -21,11 +21,11 @@ final class ReconcileAttachments extends Command
             Attachment::query()->eachById(function (Attachment $attachment) use ($files, &$missing): void {
                 $path = $files->readPath($attachment->path);
                 if (! $path || filesize($path) !== $attachment->size_bytes || hash_file('sha256', $path) !== $attachment->sha256) {
-                    $this->error('Référence manquante ou altérée : #'.$attachment->id);
+                    $this->error('Missing or altered attachment reference: #'.$attachment->id);
                     $missing++;
                 }
             });
-            $cutoff = now()->subHours(max(24, config('expenses.attachments.orphan_grace_hours')))->timestamp;
+            $cutoff = now()->subHours(max(24, config('transactions.attachments.orphan_grace_hours')))->timestamp;
             $orphans = 0;
             foreach ($files->disk()->files('objects') as $relative) {
                 if (! $files->readPath($relative) || Attachment::query()->where('path', $relative)->exists()
@@ -52,7 +52,7 @@ final class ReconcileAttachments extends Command
                     }
                 }
             }
-            $this->info($orphans.' fichier(s) orphelin(s) ancien(s). '.($this->option('delete') ? 'Nettoyage exécuté.' : 'Simulation, aucun fichier supprimé.'));
+            $this->info($orphans.' old orphaned file(s). '.($this->option('delete') ? 'Cleanup completed.' : 'Dry run; no files deleted.'));
 
             return $missing ? self::FAILURE : self::SUCCESS;
         });

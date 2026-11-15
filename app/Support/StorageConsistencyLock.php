@@ -34,7 +34,7 @@ final class StorageConsistencyLock
                 usleep(25000);
             } while (microtime(true) < $deadline);
 
-            throw ValidationException::withMessages(['new_attachments' => 'Le stockage est occupé. Réessayez dans quelques instants.']);
+            throw ValidationException::withMessages(['new_attachments' => __('Storage is busy. Try again in a moment.')]);
         } finally {
             fclose($handle);
         }

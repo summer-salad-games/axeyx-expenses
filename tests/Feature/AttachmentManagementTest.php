@@ -3,19 +3,19 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
-use App\Filament\Resources\Expenses\Pages\CreateExpense;
-use App\Filament\Resources\Expenses\Pages\EditExpense;
-use App\Filament\Resources\Expenses\Pages\ViewExpense;
-use App\Filament\Resources\Expenses\RelationManagers\AttachmentsRelationManager;
+use App\Filament\Resources\Transactions\Pages\CreateTransaction;
+use App\Filament\Resources\Transactions\Pages\EditTransaction;
+use App\Filament\Resources\Transactions\Pages\ViewTransaction;
+use App\Filament\Resources\Transactions\RelationManagers\AttachmentsRelationManager;
 use App\Models\Attachment;
 use App\Models\AuditLog;
 use App\Models\Category;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountSessions;
 use App\Services\AttachmentFiles;
 use App\Services\AttachmentService;
-use App\Services\ExpenseService;
+use App\Services\TransactionService;
 use App\Support\StorageConsistencyLock;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -81,12 +81,12 @@ class AttachmentManagementTest extends TestCase
 
     private function data(array $uploads = []): array
     {
-        return ['expense_date' => '2026-11-13', 'amount' => '45,123', 'category_id' => Category::factory()->create()->id, 'new_attachments' => $uploads];
+        return ['type' => 'expense', 'transaction_date' => '2026-11-13', 'amount' => '45,123', 'category_id' => Category::factory()->create()->id, 'new_attachments' => $uploads];
     }
 
-    private function create(User $actor, array $uploads): Expense
+    private function create(User $actor, array $uploads): Transaction
     {
-        return app(ExpenseService::class)->create($actor, $this->data($uploads));
+        return app(TransactionService::class)->create($actor, $this->data($uploads));
     }
 
     public static function formats(): array
@@ -99,8 +99,8 @@ class AttachmentManagementTest extends TestCase
     {
         $actor = $this->login();
         $upload = $this->upload($extension, name: 'réçu "<test>".'.$extension);
-        $expense = $this->create($actor, [$upload]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$upload]);
+        $file = $transaction->attachments()->sole();
         $this->assertMatchesRegularExpression('/\Aobjects\/[a-f0-9]{32}\.'.preg_quote($extension).'\z/', $file->path);
         $this->assertSame(hash_file('sha256', $upload->getRealPath()), $file->sha256);
         $this->assertSame($actor->id, $file->uploaded_by);
@@ -132,8 +132,8 @@ class AttachmentManagementTest extends TestCase
     {
         $actor = $this->login();
         $upload = $this->upload('pdf', PdfFixture::bytes("%PDF-1.2 \n"));
-        $expense = $this->create($actor, [$upload]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$upload]);
+        $file = $transaction->attachments()->sole();
         $this->assertSame('application/pdf', $file->mime_type);
         $this->get(route('attachments.show', $file))->assertOk()->assertHeader('Content-Type', 'application/pdf');
     }
@@ -148,7 +148,7 @@ class AttachmentManagementTest extends TestCase
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('new_attachments', $exception->errors());
         }
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('attachments', 0);
         $this->assertSame([], Storage::disk('attachments')->files('objects'));
     }
@@ -162,10 +162,10 @@ class AttachmentManagementTest extends TestCase
                 $this->create($actor, [$forged]);
                 $this->fail('Forged upload accepted.');
             } catch (ValidationException) {
-                $this->assertDatabaseCount('expenses', 0);
+                $this->assertDatabaseCount('transactions', 0);
             }
         }
-        config(['expenses.attachments.image_pixels' => 32]);
+        config(['transactions.attachments.image_pixels' => 32]);
         $this->expectException(ValidationException::class);
         $this->create($actor, [$png]);
     }
@@ -175,22 +175,22 @@ class AttachmentManagementTest extends TestCase
         $actor = $this->login();
         $upload = $this->upload();
         $size = filesize($upload->getRealPath());
-        config(['expenses.attachments.count' => 2, 'expenses.attachments.total_bytes' => $size * 2, 'expenses.attachments.file_bytes' => $size]);
-        $expense = $this->create($actor, [$upload]);
+        config(['transactions.attachments.count' => 2, 'transactions.attachments.total_bytes' => $size * 2, 'transactions.attachments.file_bytes' => $size]);
+        $transaction = $this->create($actor, [$upload]);
         $data = $this->data([$this->upload()]);
-        app(ExpenseService::class)->update($actor, $expense, $data);
-        foreach ([['expenses.attachments.count' => 2], ['expenses.attachments.count' => 10], ['expenses.attachments.file_bytes' => $size - 1]] as $limits) {
+        app(TransactionService::class)->update($actor, $transaction, $data);
+        foreach ([['transactions.attachments.count' => 2], ['transactions.attachments.count' => 10], ['transactions.attachments.file_bytes' => $size - 1]] as $limits) {
             config($limits);
             try {
-                app(ExpenseService::class)->update($actor, $expense, $this->data([$this->upload()]));
+                app(TransactionService::class)->update($actor, $transaction, $this->data([$this->upload()]));
                 $this->fail('Limit exceeded.');
             } catch (ValidationException) {
-                $this->assertSame(2, $expense->attachments()->count());
+                $this->assertSame(2, $transaction->attachments()->count());
                 $this->assertCount(2, Storage::disk('attachments')->files('objects'));
             }
         }
-        app(ExpenseService::class)->update($actor, $expense, $this->data());
-        $this->assertSame(2, $expense->attachments()->count());
+        app(TransactionService::class)->update($actor, $transaction, $this->data());
+        $this->assertSame(2, $transaction->attachments()->count());
     }
 
     public static function accessMatrix(): array
@@ -202,18 +202,18 @@ class AttachmentManagementTest extends TestCase
     public function test_all_roles_can_read_but_only_authorized_writers_can_mutate(string $role, bool $own, bool $canWrite): void
     {
         $admin = $this->login();
-        $expense = $this->create($admin, [$this->upload()]);
+        $transaction = $this->create($admin, [$this->upload()]);
         $actor = $this->login($role);
         if ($own) {
-            $expense->forceFill(['created_by' => $actor->id])->save();
+            $transaction->forceFill(['created_by' => $actor->id])->save();
         }
-        $file = $expense->attachments()->sole();
+        $file = $transaction->attachments()->sole();
         $this->get(route('attachments.show', $file))->assertOk();
         if (! $canWrite) {
             foreach (['add', 'remove'] as $operation) {
                 try {
                     $operation === 'add'
-                        ? app(ExpenseService::class)->update($actor, $expense, $this->data([$this->upload()]))
+                        ? app(TransactionService::class)->update($actor, $transaction, $this->data([$this->upload()]))
                         : app(AttachmentService::class)->remove($actor, $file);
                     $this->fail('Unauthorized mutation.');
                 } catch (AuthorizationException) {
@@ -221,7 +221,7 @@ class AttachmentManagementTest extends TestCase
                 }
             }
         } else {
-            app(ExpenseService::class)->update($actor, $expense, $this->data([$this->upload('pdf')]));
+            app(TransactionService::class)->update($actor, $transaction, $this->data([$this->upload('pdf')]));
             app(AttachmentService::class)->remove($actor, $file);
             $this->assertDatabaseMissing('attachments', ['id' => $file->id]);
             $this->assertFileDoesNotExist(Storage::disk('attachments')->path($file->path));
@@ -232,8 +232,8 @@ class AttachmentManagementTest extends TestCase
     public function test_anonymous_incomplete_revoked_and_deleted_expense_access_is_denied(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload()]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$this->upload()]);
+        $file = $transaction->attachments()->sole();
         auth()->logout();
         $this->get(route('attachments.show', $file))->assertRedirect('/login');
         $this->actingAs($actor);
@@ -243,19 +243,19 @@ class AttachmentManagementTest extends TestCase
         $actor->forceFill(['must_change_password' => true])->save();
         $this->get(route('attachments.show', $file))->assertForbidden();
         $actor->forceFill(['must_change_password' => false])->save();
-        app(ExpenseService::class)->delete($actor, $expense);
+        app(TransactionService::class)->delete($actor, $transaction);
         $this->get(route('attachments.show', $file))->assertNotFound();
         $this->artisan('attachments:reconcile', ['--delete' => true])->assertSuccessful();
         $this->assertFileDoesNotExist(Storage::disk('attachments')->path($file->path));
         $actor->forceFill(['is_active' => false])->save();
-        $this->get('/expenses')->assertRedirect('/login');
+        $this->get('/transactions')->assertRedirect('/login');
     }
 
     public function test_unsafe_stored_paths_symlinks_and_mime_types_are_not_served(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload()]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$this->upload()]);
+        $file = $transaction->attachments()->sole();
         $original = $file->path;
         foreach (['../.env', '/etc/passwd', 'objects/../secret.png', 'objects/evil.html'] as $path) {
             $file->forceFill(['path' => $path])->save();
@@ -288,7 +288,7 @@ class AttachmentManagementTest extends TestCase
         } catch (RuntimeException $exception) {
             $this->assertSame('Injected audit failure', $exception->getMessage());
         }
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('attachments', 0);
         $this->assertDatabaseCount('audit_logs', 0);
         $this->assertSame([], Storage::disk('attachments')->files('objects'));
@@ -315,15 +315,15 @@ class AttachmentManagementTest extends TestCase
         } catch (RuntimeException $exception) {
             $this->assertSame('Injected interrupted copy', $exception->getMessage());
         }
-        $this->assertDatabaseCount('expenses', 0);
+        $this->assertDatabaseCount('transactions', 0);
         $this->assertSame([], Storage::disk('attachments')->files('objects'));
     }
 
     public function test_reconciliation_preserves_recent_and_live_references_and_retries_failed_cleanup(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload()]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$this->upload()]);
+        $file = $transaction->attachments()->sole();
         $originalFiles = app(AttachmentFiles::class);
         $this->app->instance(AttachmentFiles::class, new class extends AttachmentFiles
         {
@@ -360,12 +360,12 @@ class AttachmentManagementTest extends TestCase
     {
         $actor = $this->login('editor');
         $data = $this->data([$this->upload()]);
-        Livewire::test(CreateExpense::class)->fillForm($data)->call('create')->assertHasNoFormErrors();
-        $expense = Expense::query()->sole();
-        $file = $expense->attachments()->sole();
-        Livewire::test(EditExpense::class, ['record' => $expense->id])->fillForm(['description' => 'Conservé'])->call('save')->assertHasNoFormErrors();
+        Livewire::test(CreateTransaction::class)->fillForm($data)->call('create')->assertHasNoFormErrors();
+        $transaction = Transaction::query()->sole();
+        $file = $transaction->attachments()->sole();
+        Livewire::test(EditTransaction::class, ['record' => $transaction->id])->fillForm(['description' => 'Conservé'])->call('save')->assertHasNoFormErrors();
         $this->assertDatabaseHas('attachments', ['id' => $file->id]);
-        Livewire::test(AttachmentsRelationManager::class, ['ownerRecord' => $expense, 'pageClass' => ViewExpense::class])
+        Livewire::test(AttachmentsRelationManager::class, ['ownerRecord' => $transaction, 'pageClass' => ViewTransaction::class])
             ->assertCanSeeTableRecords([$file])->callAction(TestAction::make('delete')->table($file))->assertHasNoActionErrors();
         $this->assertDatabaseCount('attachments', 0);
         $this->assertFileDoesNotExist(Storage::disk('attachments')->path($file->path));
@@ -400,21 +400,21 @@ class AttachmentManagementTest extends TestCase
     public function test_expense_delete_audit_failure_preserves_every_row_and_file(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload(), $this->upload('pdf')]);
-        $attachments = $expense->attachments()->get();
+        $transaction = $this->create($actor, [$this->upload(), $this->upload('pdf')]);
+        $attachments = $transaction->attachments()->get();
         Event::listen('eloquent.creating: '.AuditLog::class, function (AuditLog $audit): void {
-            if ($audit->action === 'expense.deleted') {
+            if ($audit->action === 'transaction.deleted') {
                 throw new RuntimeException('Injected delete audit failure');
             }
         });
         try {
-            app(ExpenseService::class)->delete($actor, $expense);
+            app(TransactionService::class)->delete($actor, $transaction);
             $this->fail('Expected failure.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Injected delete audit failure', $exception->getMessage());
         }
-        $this->assertDatabaseHas('expenses', ['id' => $expense->id]);
-        $this->assertSame(2, $expense->attachments()->count());
+        $this->assertDatabaseHas('transactions', ['id' => $transaction->id]);
+        $this->assertSame(2, $transaction->attachments()->count());
         foreach ($attachments as $attachment) {
             $this->assertFileExists(Storage::disk('attachments')->path($attachment->path));
         }
@@ -424,8 +424,8 @@ class AttachmentManagementTest extends TestCase
     public function test_expense_deletion_commits_rows_before_file_cleanup_and_retries_failures(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload(), $this->upload('pdf')]);
-        $attachments = $expense->attachments()->get();
+        $transaction = $this->create($actor, [$this->upload(), $this->upload('pdf')]);
+        $attachments = $transaction->attachments()->get();
         $originalFiles = app(AttachmentFiles::class);
         $files = new class extends AttachmentFiles
         {
@@ -433,7 +433,7 @@ class AttachmentManagementTest extends TestCase
 
             public function removeUnreferenced(string $relative): bool
             {
-                if (DB::transactionLevel() !== 0 || Attachment::query()->where('path', $relative)->exists() || Expense::query()->exists()) {
+                if (DB::transactionLevel() !== 0 || Attachment::query()->where('path', $relative)->exists() || Transaction::query()->exists()) {
                     throw new RuntimeException('Cleanup preceded database commit');
                 }
                 $this->calls++;
@@ -442,9 +442,9 @@ class AttachmentManagementTest extends TestCase
             }
         };
         $this->app->instance(AttachmentFiles::class, $files);
-        app(ExpenseService::class)->delete($actor, $expense);
+        app(TransactionService::class)->delete($actor, $transaction);
         $this->assertSame(2, $files->calls);
-        $this->assertDatabaseMissing('expenses', ['id' => $expense->id]);
+        $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
         $this->assertDatabaseCount('attachments', 0);
         foreach ($attachments as $attachment) {
             $this->assertFileExists($originalFiles->disk()->path($attachment->path));
@@ -464,13 +464,13 @@ class AttachmentManagementTest extends TestCase
     public function test_two_real_processes_cannot_exceed_the_same_expense_limit(string $limit): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, []);
+        $transaction = $this->create($actor, []);
         $input = $this->upload()->getRealPath();
         $jobs = [];
-        app(StorageConsistencyLock::class)->run(function () use ($actor, $expense, $input, $limit, &$jobs): void {
+        app(StorageConsistencyLock::class)->run(function () use ($actor, $transaction, $input, $limit, &$jobs): void {
             for ($i = 0; $i < 2; $i++) {
                 $path = Storage::disk('local')->path('test-inputs/job'.$i.'.json');
-                file_put_contents($path, json_encode(['actor' => $actor->id, 'expense' => $expense->id, 'category' => $expense->category_id, 'upload' => $input, 'count' => $limit === 'count' ? 1 : 10, 'total' => $limit === 'total' ? filesize($input) : 1000000]));
+                file_put_contents($path, json_encode(['actor' => $actor->id, 'expense' => $transaction->id, 'category' => $transaction->category_id, 'upload' => $input, 'count' => $limit === 'count' ? 1 : 10, 'total' => $limit === 'total' ? filesize($input) : 1000000]));
                 $process = proc_open([PHP_BINARY, base_path('tests/Support/attachment-writer.php'), $path], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
                 $this->assertIsResource($process);
                 $jobs[] = [$process, $pipes, $path];
@@ -490,15 +490,15 @@ class AttachmentManagementTest extends TestCase
         }
         sort($results);
         $this->assertSame(['accepted', 'rejected'], $results);
-        $this->assertSame(1, $expense->attachments()->count());
+        $this->assertSame(1, $transaction->attachments()->count());
         $this->assertCount(1, Storage::disk('attachments')->files('objects'));
     }
 
     public function test_ambient_transactions_are_rejected_before_files_are_changed(): void
     {
         $actor = $this->login();
-        $expense = $this->create($actor, [$this->upload()]);
-        $file = $expense->attachments()->sole();
+        $transaction = $this->create($actor, [$this->upload()]);
+        $file = $transaction->attachments()->sole();
         try {
             DB::transaction(fn () => app(AttachmentService::class)->remove($actor, $file));
             $this->fail('Unsafe nested transaction accepted.');

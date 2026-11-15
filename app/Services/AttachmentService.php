@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Attachment;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Support\StorageConsistencyLock;
 use Closure;
@@ -15,18 +15,18 @@ use Illuminate\Validation\ValidationException;
 
 final class AttachmentService
 {
-    /** Expense and attachment metadata/audits commit together. Bytes are staged before the short transaction. */
-    public function save(User $actor, ?Expense $expense, mixed $uploads, Closure $saveExpense): Expense
+    /** Transaction and attachment metadata/audits commit together. Bytes are staged before the short transaction. */
+    public function save(User $actor, ?Transaction $transaction, mixed $uploads, Closure $saveTransaction): Transaction
     {
         $this->assertNoTransaction();
-        Gate::forUser($actor)->authorize($expense ? 'update' : 'create', $expense ?: Expense::class);
-        if (! is_array($uploads) || count($uploads) > config('expenses.attachments.count')) {
+        Gate::forUser($actor)->authorize($transaction ? 'update' : 'create', $transaction ?: Transaction::class);
+        if (! is_array($uploads) || count($uploads) > config('transactions.attachments.count')) {
             throw ValidationException::withMessages(['new_attachments' => 'Trop de fichiers ou sélection invalide.']);
         }
         $files = app(AttachmentFiles::class);
         $inspected = array_map($files->inspect(...), $uploads);
 
-        return app(StorageConsistencyLock::class)->run(function () use ($actor, $saveExpense, $files, $inspected): Expense {
+        return app(StorageConsistencyLock::class)->run(function () use ($actor, $saveTransaction, $files, $inspected): Transaction {
             $staged = [];
             try {
                 // An orphan from a partial write is tracked before the first byte is copied.
@@ -35,17 +35,17 @@ final class AttachmentService
                     $files->stage($file);
                 }
 
-                return DB::transaction(function () use ($actor, $saveExpense, $inspected): Expense {
-                    $record = $saveExpense();
+                return DB::transaction(function () use ($actor, $saveTransaction, $inspected): Transaction {
+                    $record = $saveTransaction();
                     $retained = $record->attachments()->get(['size_bytes']);
-                    if ($retained->count() + count($inspected) > config('expenses.attachments.count')
-                        || $retained->sum('size_bytes') + array_sum(array_column($inspected, 'size_bytes')) > config('expenses.attachments.total_bytes')) {
+                    if ($retained->count() + count($inspected) > config('transactions.attachments.count')
+                        || $retained->sum('size_bytes') + array_sum(array_column($inspected, 'size_bytes')) > config('transactions.attachments.total_bytes')) {
                         throw ValidationException::withMessages(['new_attachments' => 'Limite de pièces jointes dépassée (nombre ou taille totale).']);
                     }
                     foreach ($inspected as $file) {
                         $attachment = new Attachment;
                         unset($file['source']);
-                        $attachment->forceFill($file + ['expense_id' => $record->id, 'uploaded_by' => $actor->id])->save();
+                        $attachment->forceFill($file + ['transaction_id' => $record->id, 'uploaded_by' => $actor->id])->save();
                         app(AuditRecorder::class)->record('attachment.added', $attachment, actor: $actor);
                     }
 
@@ -86,20 +86,20 @@ final class AttachmentService
         }
     }
 
-    public function removeExpense(User $actor, Expense $expense): bool
+    public function removeTransaction(User $actor, Transaction $transaction): bool
     {
         $this->assertNoTransaction();
 
-        return app(StorageConsistencyLock::class)->run(function () use ($actor, $expense): bool {
-            $paths = DB::transaction(function () use ($actor, $expense): array {
-                $record = Expense::query()->findOrFail($expense->getKey());
+        return app(StorageConsistencyLock::class)->run(function () use ($actor, $transaction): bool {
+            $paths = DB::transaction(function () use ($actor, $transaction): array {
+                $record = Transaction::query()->findOrFail($transaction->getKey());
                 Gate::forUser($actor)->authorize('delete', $record);
                 $attachments = $record->attachments()->get();
                 foreach ($attachments as $attachment) {
                     app(AuditRecorder::class)->record('attachment.removed', $attachment, actor: $actor);
                     $attachment->delete();
                 }
-                app(AuditRecorder::class)->record('expense.deleted', $record, actor: $actor);
+                app(AuditRecorder::class)->record('transaction.deleted', $record, actor: $actor);
                 $record->delete();
 
                 return $attachments->pluck('path')->all();

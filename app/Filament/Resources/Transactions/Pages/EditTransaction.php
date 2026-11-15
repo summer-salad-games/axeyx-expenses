@@ -1,29 +1,29 @@
 <?php
 
-namespace App\Filament\Resources\Expenses\Pages;
+namespace App\Filament\Resources\Transactions\Pages;
 
 use App\Filament\Concerns\MapsFormValidationErrors;
-use App\Filament\Resources\Expenses\ExpenseResource;
-use App\Services\ExpenseService;
+use App\Filament\Resources\Transactions\TransactionResource;
+use App\Services\TransactionService;
 use App\Support\TndAmount;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 
-class EditExpense extends EditRecord
+class EditTransaction extends EditRecord
 {
     use MapsFormValidationErrors;
 
-    protected static string $resource = ExpenseResource::class;
+    protected static string $resource = TransactionResource::class;
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        return $this->withFormValidation(fn () => app(ExpenseService::class)->update(Filament::auth()->user(), $record, $data));
+        return $this->withFormValidation(fn () => app(TransactionService::class)->update(Filament::auth()->user(), $record, $data));
     }
 
     protected function getRedirectUrl(): string
     {
-        return ExpenseResource::getUrl('view', ['record' => $this->getRecord()]);
+        return TransactionResource::getUrl('view', ['record' => $this->getRecord()]);
     }
 
     protected function mutateFormDataBeforeFill(array $data): array
@@ -36,6 +36,6 @@ class EditExpense extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [ExpenseResource::deleteAction()->successRedirectUrl(ExpenseResource::getUrl())];
+        return [TransactionResource::deleteAction()->successRedirectUrl(TransactionResource::getUrl())];
     }
 }

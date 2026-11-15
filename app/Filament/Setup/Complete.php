@@ -36,7 +36,7 @@ class Complete extends SimplePage
     #[Unexposed]
     public function getSubheading(): string
     {
-        return 'Votre compte est sécurisé. Vous pouvez maintenant accéder au registre des dépenses.';
+        return 'Votre compte est sécurisé. Vous pouvez maintenant accéder au registre des transactions.';
     }
 
     #[Unexposed]

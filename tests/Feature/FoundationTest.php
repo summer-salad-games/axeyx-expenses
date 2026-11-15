@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Support\TestIsolation;
 use Carbon\CarbonImmutable;
@@ -25,6 +25,22 @@ use Tests\TestCase;
 class FoundationTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function test_no_application_notification_or_job_tables_are_installed(): void
+    {
+        foreach (['notifications', 'jobs', 'failed_jobs', 'job_batches'] as $table) {
+            $this->assertFalse(Schema::hasTable($table));
+        }
+        $this->assertSame('sync', config('queue.default'));
+    }
+
+    public function test_database_rejects_a_transaction_with_a_category_of_another_type(): void
+    {
+        $attributes = $this->transactionAttributes(1234);
+        $attributes['type'] = 'revenue';
+        $this->expectException(QueryException::class);
+        DB::table('transactions')->insert($attributes);
+    }
 
     public function test_sqlite_safety_settings_survive_reconnection(): void
     {
@@ -63,7 +79,7 @@ class FoundationTest extends TestCase
     public function test_isolation_refuses_a_non_loopback_application_url(): void
     {
         $original = config('app.url');
-        config(['app.url' => 'https://expenses.axeyx.com']);
+        config(['app.url' => 'https://transactions.axeyx.com']);
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Tests require a loopback application URL.');
 
@@ -149,13 +165,13 @@ class FoundationTest extends TestCase
         }
     }
 
-    public function test_expense_date_remains_date_only_when_given_a_datetime(): void
+    public function test_transaction_date_remains_date_only_when_given_a_datetime(): void
     {
-        $expense = Expense::factory()->create([
-            'expense_date' => CarbonImmutable::parse('2026-11-11 12:30:00'),
+        $transaction = Transaction::factory()->create([
+            'type' => 'expense', 'transaction_date' => CarbonImmutable::parse('2026-11-11 12:30:00'),
         ]);
 
-        $this->assertSame('2026-11-11', DB::table('expenses')->where('id', $expense->id)->value('expense_date'));
+        $this->assertSame('2026-11-11', DB::table('transactions')->where('id', $transaction->id)->value('transaction_date'));
     }
 
     public function test_migrations_and_seeding_create_no_accounts_or_database_sessions_cache(): void
@@ -197,19 +213,19 @@ class FoundationTest extends TestCase
     #[DataProvider('invalidAmounts')]
     public function test_database_rejects_invalid_stored_money(mixed $amount): void
     {
-        $expense = $this->expenseAttributes($amount);
+        $transaction = $this->transactionAttributes($amount);
         $this->expectException(QueryException::class);
 
-        DB::table('expenses')->insert($expense);
+        DB::table('transactions')->insert($transaction);
     }
 
     public function test_sqlite_aggregates_millimes_as_exact_integers(): void
     {
-        $expense = $this->expenseAttributes(12500);
-        DB::table('expenses')->insert($expense);
-        DB::table('expenses')->insert([...$expense, 'amount_millimes' => 1001]);
+        $transaction = $this->transactionAttributes(12500);
+        DB::table('transactions')->insert($transaction);
+        DB::table('transactions')->insert([...$transaction, 'amount_millimes' => 1001]);
 
-        $result = DB::table('expenses')->selectRaw('SUM(amount_millimes) AS total, COUNT(*) AS count')->first();
+        $result = DB::table('transactions')->selectRaw('SUM(amount_millimes) AS total, COUNT(*) AS count')->first();
 
         $this->assertSame(13501, $result->total);
         $this->assertSame(2, $result->count);
@@ -217,19 +233,19 @@ class FoundationTest extends TestCase
 
     public function test_database_rejects_expenses_with_missing_categories(): void
     {
-        $expense = $this->expenseAttributes(12500);
+        $transaction = $this->transactionAttributes(12500);
         $this->expectException(QueryException::class);
 
-        DB::table('expenses')->insert([...$expense, 'category_id' => 999999]);
+        DB::table('transactions')->insert([...$transaction, 'category_id' => 999999]);
     }
 
     public function test_categories_referenced_by_expenses_cannot_be_hard_deleted(): void
     {
-        $expense = $this->expenseAttributes(12500);
-        DB::table('expenses')->insert($expense);
+        $transaction = $this->transactionAttributes(12500);
+        DB::table('transactions')->insert($transaction);
         $this->expectException(QueryException::class);
 
-        DB::table('categories')->where('id', $expense['category_id'])->delete();
+        DB::table('categories')->where('id', $transaction['category_id'])->delete();
     }
 
     public function test_french_category_names_are_unique_ignoring_case_and_surrounding_spaces(): void
@@ -310,10 +326,10 @@ class FoundationTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function expenseAttributes(mixed $amount): array
+    private function transactionAttributes(mixed $amount): array
     {
         return [
-            'expense_date' => '2026-11-11',
+            'type' => 'expense', 'transaction_date' => '2026-11-11',
             'amount_millimes' => $amount,
             'category_id' => Category::create(['name' => 'Fournitures'])->id,
             'created_by' => User::factory()->create()->id,

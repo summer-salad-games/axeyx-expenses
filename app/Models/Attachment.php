@@ -18,10 +18,10 @@ class Attachment extends Model
         return ['size_bytes' => 'integer'];
     }
 
-    /** @return BelongsTo<Expense, $this> */
-    public function expense(): BelongsTo
+    /** @return BelongsTo<Transaction, $this> */
+    public function transaction(): BelongsTo
     {
-        return $this->belongsTo(Expense::class);
+        return $this->belongsTo(Transaction::class);
     }
 
     /** @return BelongsTo<User, $this> */

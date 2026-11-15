@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AccountService;
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Artisan;
@@ -21,16 +22,39 @@ class AccountCommandsTest extends TestCase
 {
     use DatabaseMigrations;
 
+    public function test_console_validation_is_english_and_restores_the_french_application_locale(): void
+    {
+        // Laravel disables Symfony command events in tests; enable the real CLI lifecycle.
+        $kernel = app(Kernel::class);
+        $kernel->rerouteSymfonyCommandEvents();
+        $kernel->setArtisan(null);
+        app()->setLocale('fr');
+        $this->artisan('accounts:create')
+            ->expectsQuestion('Name', 'Test account')
+            ->expectsQuestion('Email address', 'english@example.test')
+            ->expectsChoice('Role', 'viewer', ['administrator', 'editor', 'viewer'])
+            ->expectsQuestion('Password', 'short')
+            ->expectsQuestion('Confirm password', 'short')
+            ->expectsOutputToContain('at least 12 characters')
+            ->assertFailed();
+        $this->assertSame('fr', app()->getLocale());
+        $this->assertSame('Le stockage est occupé. Réessayez dans quelques instants.', __('Storage is busy. Try again in a moment.'));
+        $this->artisan('attachments:reconcile')
+            ->expectsOutput('0 old orphaned file(s). Dry run; no files deleted.')
+            ->assertSuccessful();
+        $this->assertSame('fr', app()->getLocale());
+    }
+
     public function test_create_prompts_for_hidden_confirmed_password_and_normalizes_account_data(): void
     {
         $password = $this->password();
 
         $this->artisan('accounts:create')
-            ->expectsQuestion('Nom', '  Médecin de test  ')
-            ->expectsQuestion('Adresse e-mail', '  New.User@EXAMPLE.TEST  ')
-            ->expectsChoice('Rôle', 'viewer', ['administrator', 'editor', 'viewer'])
-            ->expectsQuestion('Mot de passe', $password)
-            ->expectsQuestion('Confirmez le mot de passe', $password)
+            ->expectsQuestion('Name', '  Médecin de test  ')
+            ->expectsQuestion('Email address', '  New.User@EXAMPLE.TEST  ')
+            ->expectsChoice('Role', 'viewer', ['administrator', 'editor', 'viewer'])
+            ->expectsQuestion('Password', $password)
+            ->expectsQuestion('Confirm password', $password)
             ->doesntExpectOutputToContain($password)
             ->assertSuccessful();
 
@@ -53,11 +77,11 @@ class AccountCommandsTest extends TestCase
         $this->assertSame(Role::Viewer, $user->role);
 
         $this->artisan('accounts:create')
-            ->expectsQuestion('Nom', 'Deuxième')
-            ->expectsQuestion('Adresse e-mail', 'same@example.test')
-            ->expectsChoice('Rôle', 'viewer', ['administrator', 'editor', 'viewer'])
-            ->expectsQuestion('Mot de passe', $password)
-            ->expectsQuestion('Confirmez le mot de passe', $password)
+            ->expectsQuestion('Name', 'Deuxième')
+            ->expectsQuestion('Email address', 'same@example.test')
+            ->expectsChoice('Role', 'viewer', ['administrator', 'editor', 'viewer'])
+            ->expectsQuestion('Password', $password)
+            ->expectsQuestion('Confirm password', $password)
             ->assertFailed();
 
         $this->assertDatabaseCount('users', 1);
@@ -88,11 +112,11 @@ class AccountCommandsTest extends TestCase
     public function test_create_rejects_weak_or_unconfirmed_password_without_persisting_data(string $password, string $confirmation): void
     {
         $this->artisan('accounts:create')
-            ->expectsQuestion('Nom', 'Compte invalide')
-            ->expectsQuestion('Adresse e-mail', 'invalid@example.test')
-            ->expectsChoice('Rôle', 'viewer', ['administrator', 'editor', 'viewer'])
-            ->expectsQuestion('Mot de passe', $password)
-            ->expectsQuestion('Confirmez le mot de passe', $confirmation)
+            ->expectsQuestion('Name', 'Compte invalide')
+            ->expectsQuestion('Email address', 'invalid@example.test')
+            ->expectsChoice('Role', 'viewer', ['administrator', 'editor', 'viewer'])
+            ->expectsQuestion('Password', $password)
+            ->expectsQuestion('Confirm password', $confirmation)
             ->doesntExpectOutputToContain($password)
             ->assertFailed();
 
@@ -106,8 +130,8 @@ class AccountCommandsTest extends TestCase
         $password = $this->password();
 
         $this->artisan('accounts:password', ['user' => $user->email])
-            ->expectsQuestion('Mot de passe', $password)
-            ->expectsQuestion('Confirmez le mot de passe', $password)
+            ->expectsQuestion('Password', $password)
+            ->expectsQuestion('Confirm password', $password)
             ->doesntExpectOutputToContain($password)
             ->assertSuccessful();
 
@@ -159,11 +183,11 @@ class AccountCommandsTest extends TestCase
             'app_authentication_secret' => 'JBSWY3DPEHPK3PXP',
             'app_authentication_recovery_codes' => ['fixture-recovery-code'],
         ])->save();
-        $question = 'Réinitialiser la configuration TOTP et les codes de récupération de ce compte ?';
+        $question = 'Reset TOTP setup and recovery codes for this account?';
 
         $this->artisan('accounts:mfa-reset', ['user' => $user->getKey()])
             ->expectsConfirmation($question, 'no')
-            ->expectsOutput('Opération annulée.')
+            ->expectsOutput('Operation cancelled.')
             ->assertSuccessful();
         $this->assertSame('JBSWY3DPEHPK3PXP', $user->fresh()->app_authentication_secret);
         $this->assertSame(7, $user->fresh()->auth_version);
@@ -193,7 +217,7 @@ class AccountCommandsTest extends TestCase
         $output = Artisan::output();
         $this->assertStringContainsString($user->email, $output);
         $this->assertStringContainsString('viewer', $output);
-        $this->assertStringContainsString('configuré', $output);
+        $this->assertStringContainsString('configured', $output);
         foreach ([$user->password, 'old-remember-token', 'JBSWY3DPEHPK3PXP', 'fixture-recovery-code'] as $secret) {
             $this->assertStringNotContainsString($secret, $output);
         }
@@ -204,10 +228,10 @@ class AccountCommandsTest extends TestCase
         $user = $this->revocableUser();
 
         $this->artisan('accounts:role', ['user' => $user->getKey(), 'role' => 'owner'])
-            ->expectsOutput('Rôle invalide : administrator, editor ou viewer.')
+            ->expectsOutput('Invalid role: administrator, editor or viewer.')
             ->assertFailed();
         $this->artisan('accounts:disable', ['user' => 'absent@example.test'])
-            ->expectsOutput('Utilisateur introuvable.')
+            ->expectsOutput('User not found.')
             ->assertFailed();
         $this->assertSame(Role::Viewer, $user->fresh()->role);
         $this->assertTrue($user->fresh()->is_active);

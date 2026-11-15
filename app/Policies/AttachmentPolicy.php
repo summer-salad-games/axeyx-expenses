@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Models\Attachment;
-use App\Models\Expense;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Security\AccountAccess;
 
@@ -19,14 +19,14 @@ class AttachmentPolicy
     public function view(User $user, Attachment $attachment): bool
     {
         // Query the parent instead of trusting a possibly stale loaded relation.
-        $expense = $attachment->expense()->first();
+        $transaction = $attachment->transaction()->first();
 
-        return $attachment->exists && $expense !== null && app(ExpensePolicy::class)->view($user, $expense);
+        return $attachment->exists && $transaction !== null && app(TransactionPolicy::class)->view($user, $transaction);
     }
 
-    public function create(User $user, ?Expense $expense = null): bool
+    public function create(User $user, ?Transaction $transaction = null): bool
     {
-        return $expense !== null && app(ExpensePolicy::class)->update($user, $expense);
+        return $transaction !== null && app(TransactionPolicy::class)->update($user, $transaction);
     }
 
     public function update(User $user, Attachment $attachment): bool
@@ -37,9 +37,9 @@ class AttachmentPolicy
 
     public function delete(User $user, Attachment $attachment): bool
     {
-        $expense = $attachment->expense()->first();
+        $transaction = $attachment->transaction()->first();
 
-        return $attachment->exists && $expense !== null && app(ExpensePolicy::class)->update($user, $expense);
+        return $attachment->exists && $transaction !== null && app(TransactionPolicy::class)->update($user, $transaction);
     }
 
     public function deleteAny(User $user): bool

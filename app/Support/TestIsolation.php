@@ -74,7 +74,6 @@ final class TestIsolation
             'session.files' => $root.'/sessions',
             'view.compiled' => $root.'/views',
             'mail.default' => 'array',
-            'broadcasting.default' => 'null',
         ]);
         foreach (['private', 'attachments', 'cache', 'locks', 'sessions', 'views'] as $directory) {
             $path = $root.'/'.$directory;

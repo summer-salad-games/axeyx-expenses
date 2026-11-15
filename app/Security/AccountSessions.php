@@ -2,7 +2,6 @@
 
 namespace App\Security;
 
-use App\Events\AccountAccessRevoked;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -33,7 +32,6 @@ final class AccountSessions
                 'remember_token' => Str::random(60),
             ]));
             $user->refresh();
-            event(new AccountAccessRevoked($user->getKey(), $user->auth_version));
         });
     }
 }

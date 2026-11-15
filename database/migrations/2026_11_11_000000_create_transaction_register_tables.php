@@ -14,38 +14,43 @@ return new class extends Migration
             CREATE TABLE categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 100),
-                name_key TEXT NOT NULL UNIQUE CHECK (length(name_key) > 0),
+                type TEXT NOT NULL DEFAULT 'expense' CHECK (type IN ('expense', 'revenue')),
+                name_key TEXT NOT NULL CHECK (length(name_key) > 0),
                 is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
                 created_at DATETIME,
-                updated_at DATETIME
+                updated_at DATETIME,
+                UNIQUE(type, name_key),
+                UNIQUE(id, type)
             )
             SQL);
 
         DB::statement(<<<'SQL'
-            CREATE TABLE expenses (
+            CREATE TABLE transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                expense_date DATE NOT NULL CHECK (
-                    length(expense_date) = 10 AND expense_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                type TEXT NOT NULL CHECK (type IN ('expense', 'revenue')),
+                transaction_date DATE NOT NULL CHECK (
+                    length(transaction_date) = 10 AND transaction_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                 ),
                 amount_millimes INTEGER NOT NULL CHECK (
                     typeof(amount_millimes) = 'integer' AND amount_millimes > 0 AND amount_millimes <= 999999999999
                 ),
-                category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+                category_id INTEGER NOT NULL,
                 description TEXT CHECK (description IS NULL OR length(description) <= 5000),
                 created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
                 created_at DATETIME,
                 updated_at DATETIME,
-                deleted_at DATETIME
+                FOREIGN KEY(category_id, type) REFERENCES categories(id, type) ON DELETE RESTRICT ON UPDATE RESTRICT
             )
             SQL);
-        DB::statement('CREATE INDEX expenses_deleted_at_expense_date_index ON expenses (deleted_at, expense_date)');
-        DB::statement('CREATE INDEX expenses_category_id_expense_date_index ON expenses (category_id, expense_date)');
-        DB::statement('CREATE INDEX expenses_created_by_expense_date_index ON expenses (created_by, expense_date)');
+        DB::statement('CREATE INDEX transactions_date_index ON transactions (transaction_date)');
+        DB::statement('CREATE INDEX transactions_type_date_index ON transactions (type, transaction_date)');
+        DB::statement('CREATE INDEX transactions_category_id_transaction_date_index ON transactions (category_id, transaction_date)');
+        DB::statement('CREATE INDEX transactions_created_by_transaction_date_index ON transactions (created_by, transaction_date)');
 
         DB::statement(<<<'SQL'
             CREATE TABLE attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                expense_id INTEGER NOT NULL REFERENCES expenses(id) ON DELETE RESTRICT,
+                transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE RESTRICT,
                 path TEXT NOT NULL UNIQUE CHECK (length(path) > 0),
                 original_name TEXT NOT NULL CHECK (length(original_name) BETWEEN 1 AND 255),
                 mime_type TEXT NOT NULL,
@@ -56,22 +61,7 @@ return new class extends Migration
                 updated_at DATETIME
             )
             SQL);
-        DB::statement('CREATE INDEX attachments_expense_id_index ON attachments (expense_id)');
-
-        DB::statement(<<<'SQL'
-            CREATE TABLE notifications (
-                id VARCHAR(36) PRIMARY KEY NOT NULL,
-                type VARCHAR(255) NOT NULL,
-                notifiable_type VARCHAR(255) NOT NULL,
-                notifiable_id INTEGER NOT NULL,
-                data TEXT NOT NULL CHECK (json_valid(data)),
-                read_at DATETIME,
-                created_at DATETIME,
-                updated_at DATETIME
-            )
-            SQL);
-        DB::statement('CREATE INDEX notifications_notifiable_type_notifiable_id_index ON notifications (notifiable_type, notifiable_id)');
-        DB::statement('CREATE INDEX notifications_recipient_read_at_index ON notifications (notifiable_type, notifiable_id, read_at)');
+        DB::statement('CREATE INDEX attachments_transaction_id_index ON attachments (transaction_id)');
 
         DB::statement(<<<'SQL'
             CREATE TABLE audit_logs (
@@ -90,9 +80,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('audit_logs');
-        Schema::dropIfExists('notifications');
         Schema::dropIfExists('attachments');
-        Schema::dropIfExists('expenses');
+        Schema::dropIfExists('transactions');
         Schema::dropIfExists('categories');
     }
 };
