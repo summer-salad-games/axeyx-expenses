@@ -12,6 +12,7 @@ return [
     'max' => ['string' => 'Le champ :attribute ne doit pas dépasser :max caractères.'],
     'min' => ['string' => 'Le champ :attribute doit contenir au moins :min caractères.'],
     'password' => [
+        'common' => 'Ce mot de passe est trop courant. Choisissez une autre phrase de passe.',
         'mixed' => 'Le champ :attribute doit contenir une majuscule et une minuscule.',
         'numbers' => 'Le champ :attribute doit contenir un chiffre.',
         'symbols' => 'Le champ :attribute doit contenir un symbole.',

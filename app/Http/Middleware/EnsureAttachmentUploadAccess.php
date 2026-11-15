@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\Response;
 
 final class EnsureAttachmentUploadAccess
@@ -14,6 +15,11 @@ final class EnsureAttachmentUploadAccess
     {
         Gate::authorize('create', Transaction::class);
         if ($request->isMethod('POST')) {
+            $key = 'attachment-upload:'.$request->user()->getAuthIdentifier();
+            if (RateLimiter::tooManyAttempts($key, 60)) {
+                abort(429, 'Trop de fichiers envoyés. Réessayez dans une minute.');
+            }
+            RateLimiter::hit($key, 60);
             $files = $request->file('files', []);
             abort_unless(is_array($files) && count($files) === 1, 422);
         }

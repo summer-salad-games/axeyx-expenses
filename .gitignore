@@ -38,3 +38,6 @@ Thumbs.db
 /public/css/filament/
 /public/js/filament/
 /public/fonts/filament/
+
+/deploy/backup.env
+/deploy/rclone.conf

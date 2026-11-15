@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'storage_lock_path' => env('STORAGE_LOCK_PATH'),
     'reporting_timezone' => env('REPORTING_TIMEZONE', 'Europe/Luxembourg'),
     'max_amount_millimes' => 999999999999,
     'statistics' => ['max_months' => 120],

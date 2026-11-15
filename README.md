@@ -2,7 +2,7 @@
 
 Expense and revenue register for one company and at most 20 fixed users. TND currency, required TOTP MFA, shared transaction visibility and administrator/editor/viewer roles.
 
-**Status:** milestones 1–5 are implemented and verified locally. The owner accepted a quick milestone 5 test and authorized its Git checkpoint on 2026-11-15. Security/backup operations and production deployment follow; milestone 6 has not started. Verification is recorded in PLAN.md.
+**Status:** milestones 1–6 are implemented and verified locally. The owner authorized the milestone 6 Git checkpoint on 2026-11-15. Production deployment and release checks remain milestones 7–8. Verification is recorded in PLAN.md.
 
 - [SPEC.md](SPEC.md): authoritative requirements, architecture, security and acceptance criteria.
 - [PLAN.md](PLAN.md): milestone progress and verification evidence.
@@ -79,7 +79,7 @@ The dashboard shows the company statistics described below. **Paramètres du com
 
 Sessions expire after 120 minutes without server requests (`SESSION_LIFETIME=120`). Expiry is enforced on the next request; an idle open tab is not immediately cleared. Background requests can renew the session. Persistent “remember me” login is disabled.
 
-This development revision replaces the register schema. Stop the server and reset the local database before testing it; existing accounts and transactions will be deleted. There is no data migration or backward compatibility, as approved by the owner.
+Only when upgrading an older expense-only development database: stop the server and use the reset below for the revised transaction schema. This deletes existing accounts and transactions; no compatibility migration is provided, as approved by the owner. Ordinary startup does not require a reset.
 
 
 To start over with an empty local database, stop the development server and run:
@@ -116,14 +116,14 @@ Use **Ajouter des pièces jointes** when creating or editing a transaction, then
 
 Limits live in `config/transactions.php`: 10 files, 10 MiB each, 50 MiB combined including existing documents. Uploads run individually. JPEG, PNG, WebP and readable non-encrypted PDFs are accepted; image decoding is limited to 16 megapixels and PDFs to 500 pages. MIME/extension, content structure, readability and resource limits are checked again on save. Validation is not antivirus scanning. `ext-gd` with JPEG/PNG/WebP support, PHP CLI and enabled local process execution are required alongside the existing PHP extensions. Document parsing runs in a bounded child process with private temporary storage. The maintained parser is [smalot/pdfparser](https://github.com/smalot/pdfparser), locked by Composer.
 
-Final files are generated beneath the private attachments disk (`ATTACHMENTS_PATH`); temporary uploads/validation and the shared consistency lock use the private local disk (`PRIVATE_STORAGE_PATH`). Never expose either directory or create a public storage symlink. Keep both stable across releases; future backup staging uses the same lock. File removal follows the committed metadata/audit change; a failed cleanup is retried by reconciliation after its grace period.
+Final files are generated beneath the private attachments disk (`ATTACHMENTS_PATH`); temporary uploads/validation use the private local disk (`PRIVATE_STORAGE_PATH`). The consistency lock defaults there; production can set `STORAGE_LOCK_PATH` to an existing shared coordination path. Never expose either directory or create a public storage symlink. Keep both stable across releases; backup staging uses the same lock. File removal follows the committed metadata/audit change; a failed cleanup is retried by reconciliation after its grace period.
 
 ```sh
 npm run attachments:reconcile
 npm run attachments:reconcile -- --delete
 ```
 
-The first command checks hashes/references and reports eligible orphans without deleting anything. The second removes only generated, unreferenced files at least 24 hours old and expired private temporary files. All files still referenced by attachment records are retained; missing/altered referenced files cause a nonzero exit and are reported by attachment ID. The scheduler runs cleanup hourly when `php artisan schedule:work` is running locally; production scheduling is prepared in the deployment milestone. No scheduler or global settings are installed automatically.
+The first command checks hashes/references and reports eligible orphans without deleting anything. The second removes only generated, unreferenced files at least 24 hours old and expired private temporary files. All files still referenced by attachment records are retained; missing/altered referenced files cause a nonzero exit and are reported by attachment ID. The daily backup job runs this cleanup automatically; it is also available manually. No separate Laravel scheduler is needed for cleanup. Files may remain until the next daily run after their grace period. No system services are installed automatically.
 
 Before deployment, align PHP CLI/FPM and Caddy with individual 10 MiB uploads plus multipart overhead (proposed `upload_max_filesize=10M`, `post_max_size=12M`, host-specific Caddy body limit at least 12 MiB), verify GD format support and child-process execution under the actual FPM identity. Production commands/changes remain owner-executed.
 
@@ -139,7 +139,7 @@ Smoke test: create a `1,001` expense and a `3,003` revenue in the same period. E
 
 ## SQLite concurrency
 
-Every connection applies WAL, foreign keys, a 5-second busy timeout and FULL synchronization. Writes use short transactions with bounded busy retries. A file consistency lock serializes transaction/attachment mutations and future coherent backup staging; reports do not take it. Dashboard queries share one short DEFERRED read snapshot, so concurrent WAL writers can proceed. There is no custom database write queue or worker. File cache/session storage avoids database session writes.
+Live application connections apply WAL, foreign keys, a 5-second busy timeout and FULL synchronization. Isolated backup copies use DELETE journal mode for a self-contained database file. Writes use short transactions with bounded busy retries. A file consistency lock serializes transaction/attachment mutations and coherent backup staging; reports do not take it. Dashboard queries share one short DEFERRED read snapshot, so concurrent WAL writers can proceed. There is no custom database write queue or worker. File cache/session storage avoids database session writes.
 
 This suits the intended modest manual workload of up to 20 users; it is not a production throughput guarantee. Verify on the actual Pi/SSD. The local PHP-linked SQLite 3.45.2 predates the [SQLite WAL-reset fix](https://sqlite.org/wal.html#wal_reset_bug). Production must use a library containing that fix (3.51.3+, patched 3.44.6/3.50.7, or a documented vendor backport); the separate sqlite3 CLI version does not prove PHP is patched. No global runtime has been modified.
 
@@ -171,15 +171,15 @@ After an MFA setup error, refresh the page before retrying. Completed security s
 
 Before preparing exact commands, obtain only the remaining non-secret Caddy site/snippet/logging/drop-in excerpts, a sanitized access-log example, bouncer chain/origin settings, existing-site baseline and DNS/router/CDN/proxy details. Never paste credentials or complete credential-bearing configurations.
 
-Deployment will use isolated runtime identities, a dedicated FPM pool/socket, private writable state, source read-only to runtime, a scheduler and backup services. Add only the app's Caddy host configuration. Validate configurations and save rollback copies before owner-approved reloads; preserve existing sites and security services.
+Deployment will use isolated runtime identities, a dedicated FPM pool/socket, private writable state, source read-only to runtime, daily backup service/timer. Add only the app's Caddy host configuration. Validate configurations and save rollback copies before owner-approved reloads; preserve existing sites and security services.
 
 Before migrations, verify a backup and explain rollback/data-loss consequences. A release switch does not reverse incompatible schema changes; restore only a verified database/attachment pair with owner approval. Never use migrate:fresh/reset on production.
 
-Planned units: axeyx-expenses-backup.service/.timer and a backup-failure helper. Add cleanup scheduling only if required. Record exact service commands and permission checks when implemented.
+Unit templates: deploy/systemd/axeyx-expenses-backup.service/.timer. Daily backup includes temporary-file reconciliation; no application scheduler is needed. Installation and target permission checks belong to milestone 7.
 
 The owner must verify IPv4 HTTPS, intended IPv6 rejection, MFA/roles/private downloads, CrowdSec and existing sites. Automated destructive/security tests use disposable local data, not production.
 
-## Accounts, backups and recovery
+## Account commands
 
 Npm shortcuts for account commands (`USER` is an ID or email; `ROLE` is `administrator`, `editor` or `viewer`):
 
@@ -192,15 +192,86 @@ npm run accounts:password -- USER
 npm run accounts:mfa-reset -- USER
 ```
 
+New passwords must have at least 12 characters and pass the local common-password blocklist; spaces, Unicode and password managers remain supported.
+
 The six account commands in [SPEC §4](SPEC.md#4-authentication-and-cli-accounts) are implemented. Run them from the project directory. `php artisan accounts:list` shows IDs and enrollment status; use an ID or email for USER in the other commands. Passwords use hidden prompts, and MFA reset asks for confirmation. Role changes, disabling, password changes and MFA resets revoke existing sessions on their next request. `accounts:password` sets a temporary password: after the next MFA login, the user must choose a different password and finish setup. It retains existing MFA enrollment; `accounts:mfa-reset` repeats MFA setup and final confirmation without repeating an already-completed password step. A password change or recovery-code regeneration in **Paramètres du compte** preserves that browser's session and revokes the others. Account changes are audited; password/MFA failures log only factor, internal user ID when known and IP.
 
 Private attachments must never use a public storage symlink or be manually purged.
 
-The backup/restore algorithm is in [SPEC §10](SPEC.md#10-google-drive-backup-and-failure-alerts). Confirmed schedule/retention: daily 03:15 Europe/Luxembourg, latest 30 successful backups, Google Drive only, no additional encryption and no persistent local archives.
+## Backup and recovery operations
 
-Before deployment, the owner privately configures a dedicated Drive folder/minimum workable OAuth scope, SMTP provider and alert recipient, and a separate secure recovery store for APP_KEY and credentials. Credentials must not enter Git, chat or backup archives.
+The algorithm and security requirements are in [SPEC §10](SPEC.md#10-google-drive-backup-and-recovery); local verification and production gates are in PLAN.md. Backups are full **unencrypted .tar.gz** archives with a sanitized SQLite snapshot, matching attachments and a JSON manifest. Authentication data is removed only from the copy, including free-page remnants. The live database/accounts are unchanged. Archives contain financial data and must stay private. The format is readable without this application using a SQLite viewer and ordinary PDF/image tools.
 
-Before enabling the schedule, verify real upload/check/retention, a received failure email and an isolated restore. Rehearse recovery before launch and quarterly; record restore duration. A powered-off Pi cannot send an immediate alert. Restore procedures must include hash/integrity/reference checks, safe extraction, correct permissions, separately held secrets and session revocation.
+Daily schedule: **03:15 Europe/Luxembourg**, catching up after a missed run. Keep **30 verified completed backups** on Google Drive; preserve at least the newly verified backup before deleting older attempts. Failed uploads never receive completion markers. Rclone content verification downloads uploaded bytes; this trades additional bandwidth for verification independent of backend hash support. There are **no email notifications**. The operator checks CLI status and systemd logs manually.
+
+All paths must be private and persistent. The staging budget is conservatively checked against logical SQLite pages (including WAL), files, archive/sanitize scratch and a live-data reserve. Defaults: compressed archive at most 10 GiB, expanded files at most 30 GiB, 100,000 entries, 30-minute child-operation timeout. Private worker scratch and staging are cleaned after success/failure; systemd ExecStopPost and the next run clean interrupted jobs. A pending restore journal blocks new backups until operator recovery. These are operational limits, not a measured production-capacity guarantee.
+
+### Configuration
+
+The new PHP requirements are ext-phar and ext-zlib, in addition to the existing SQLite/GD/extensions and local process execution. Rclone must be available on the deployment host. No global packages or services have been installed by the agent.
+
+| Setting | Purpose |
+| --- | --- |
+| BACKUP_REMOTE | Dedicated non-root rclone folder, such as proxymed-drive:proxymed-backups |
+| RCLONE_CONFIG | Explicit private OAuth configuration, file 0600; its directory must allow the backup identity to persist token refresh |
+| BACKUP_WORKSPACE | Private temporary archive/snapshot/extraction/scratch directory |
+| BACKUP_STATE_PATH | Private attempt history, latest success and interrupted-restore journal |
+| STORAGE_LOCK_PATH | Existing shared coordination file used by the web app and backup process |
+| APP_RELEASE | Deployed Git commit recorded as non-secret recovery metadata |
+
+The rclone-created backup folder should use the narrowest workable [Drive scope](https://rclone.org/drive/#scopes), evaluating drive.file. Configure OAuth privately with an explicitly selected config file; never paste tokens or commit the filled-in configuration. A folder name alone does not restrict OAuth permissions. The proposed protected config location is /var/lib/axeyx-expenses/backup-config/rclone.conf. No SMTP configuration is required. Application logs default to daily rotation with 14 days retained (LOG_STACK=daily, LOG_DAILY_DAYS=14); bound the system journal during deployment as well.
+
+Production uses a separate backup identity. The shared data group must permit coordination-lock access, SQLite WAL/SHM operation and daily cleanup, while the web identity cannot read backup OAuth credentials/state. Proposed DB mode 0660 and data directories 2770 support the shared identities; attachments are 0640. Restore preserves target UID/GID and intended private modes, so run it with an operator identity able to restore those owners/groups. Root-owned runtime environment files may remain 0640 for the runtime group. Staging and rollback creation are private before any bytes are written. Actual identities, group inheritance, permissions, SQLite behavior and systemd restrictions must be verified on the Pi before installation.
+
+### Commands
+
+After configuring an isolated destination for development, or after owner-run production setup:
+
+```sh
+npm run backups:status
+npm run backups:run
+npm run backups:restore -- --list
+npm run backups:restore -- ATTEMPT_ID --verify-only
+```
+
+Status exits nonzero when there is no recorded successful latest attempt or the latest attempt failed/is unfinished. It shows both latest attempt/stage and the last successful backup. Local history retains 90 days of completed attempt records plus the last successful record. A process crash is recorded as failed by finalization; systemd journal remains the service-level source of failure evidence. Running a backup also reconciles old orphaned files. Retention permanently removes only obsolete attempt directories in the configured application backup folder; real Drive trash/quota behavior remains an owner-run deployment check.
+
+Verification-only downloads and checks the selected archive, actual SQLite schema/integrity/FKs, database counts and every referenced file, then removes staging. It leaves current application data and configuration unchanged. The trusted SQLite schema fingerprint is tied to the migrations and regression-tested; review/update it deliberately when changing schema.
+
+### Operator-requested restore
+
+A restore replaces current financial data with the selected backup's point in time. Code, PHP/FPM and service configuration are deployed separately; install a compatible release and private target paths/environment first on a replacement server. The restore can replace a corrupt current database and does not need the old APP_KEY.
+
+1. List and verify the selected completed backup using the commands above.
+2. Stop **only this app's** PHP/FPM workers and other CLI writers and pause its backup timer. Leave Caddy, other sites and security services running. The --offline flag acknowledges that this has been done; it cannot prove that unrelated processes are stopped.
+3. Run the guided command below. It shows verified counts and requires explicit confirmation before replacement. Staging is validated before maintenance/cutover; temporary rollback data is retained until the new pair and its durable recovery checkpoint are verified.
+
+```sh
+npm run backups:restore -- ATTEMPT_ID --offline
+```
+
+Every restore creates a fresh APP_KEY, clears APP_PREVIOUS_KEYS, invalidates all passwords/MFA/recovery codes/sessions and requires full onboarding. Account IDs, roles, disabled status, ownership and financial records/files are preserved as of the backup. Review account roles/status before issuing credentials. Secrets are not printed or placed in command arguments. The CLI updates the configured environment file privately and clears the current config cache; restart PHP workers so they use the new configuration. If a managed platform injects APP_KEY separately, reconcile that external configuration before reopening.
+
+```sh
+npm run accounts:list
+npm run accounts:password -- USER
+```
+
+Set your administrator's individual temporary password first, then restart the app PHP workers and verify MFA/password/completion onboarding, financial totals and document access. Provision each remaining active account privately. Disabled accounts remain disabled; accounts without a supplied temporary password cannot log in. Verify a new backup and resume the daily timer after recovery.
+
+On failure, keep app workers stopped. A failure before durable verification rolls back or leaves a recovery journal; a failure after durable verification retains the verified new data and journal until cleanup. Recover an interrupted operation with explicit confirmation:
+
+```sh
+npm run backups:restore -- --recover --offline
+```
+
+Recovery follows the journal: rollback an unverified switch or finish cleaning a verified switch. It leaves maintenance active for operator checks. After verifying data/key/permissions and setting required temporary passwords, run php artisan up before restarting the app workers and testing access. Never manually delete a pending journal or rollback siblings. Keep a compatible environment/configuration until recovery completes. Temporary data left by a killed preparation/verification is removed by finalization under the operation locks.
+
+### Installation boundary and security hardening
+
+Templates are in deploy/systemd and deploy/backup.env.example. They are **not installed/enabled**; exact installation, permissions, actual PHP 8.4/ARM64/patched SQLite, rclone OAuth transfer/retention and systemd validation belong to owner-run milestone 7. No Pi connection has been made.
+
+The application adds nosniff, frame denial, referrer/permissions policy and a Filament-compatible CSP. That CSP permits framework inline scripts/styles/evaluated Alpine expressions; it is not a strict nonce-based policy. Existing stricter attachment sandbox headers remain intact. HTML uses no-store; logout requests origin cache/storage cleanup without clearing other subdomains’ cookies. Production session cookies default to a __Host- prefix; keep SESSION_PATH=/ and SESSION_DOMAIN unset, and verify Secure/HttpOnly/SameSite attributes on HTTPS. Authenticated temporary uploads are limited to 60 requests/minute/account. HSTS is opt-in through APP_HSTS_ENABLED after host HTTPS validation, without includeSubDomains. Production logs should use the daily channel and a bounded journal policy; trust proxy headers only for actual configured proxies.
 
 ## References
 

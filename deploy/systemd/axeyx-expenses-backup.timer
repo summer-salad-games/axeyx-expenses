@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily ProxyMed backup at 03:15 Luxembourg time
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Europe/Luxembourg
+Persistent=true
+AccuracySec=1min
+Unit=axeyx-expenses-backup.service
+
+[Install]
+WantedBy=timers.target

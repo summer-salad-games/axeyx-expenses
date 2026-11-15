@@ -1,5 +1,3 @@
 <?php
 
-use Illuminate\Support\Facades\Schedule;
-
-Schedule::command('attachments:reconcile --delete')->hourly()->withoutOverlapping();
+// Attachment reconciliation runs in the daily backup service and remains available manually.

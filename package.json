@@ -14,7 +14,10 @@
         "accounts:password": "php artisan accounts:password",
         "accounts:mfa-reset": "php artisan accounts:mfa-reset",
         "attachments:reconcile": "php artisan attachments:reconcile",
-        "test:e2e": "playwright test"
+        "test:e2e": "playwright test",
+        "backups:run": "php artisan backups:run",
+        "backups:restore": "php artisan backups:restore",
+        "backups:status": "php artisan backups:run --status"
     },
     "devDependencies": {
         "@playwright/test": "^1.0",

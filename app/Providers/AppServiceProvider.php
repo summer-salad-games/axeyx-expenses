@@ -4,7 +4,10 @@ namespace App\Providers;
 
 use App\Http\Middleware\EnsureAttachmentUploadAccess;
 use App\Models\User;
+use App\Operations\Backups\BackupTransport;
+use App\Operations\Backups\RcloneBackupTransport;
 use App\Security\AuthenticationFailures;
+use App\Security\UncommonPassword;
 use App\Support\TestIsolation;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Console\Events\CommandFinished;
@@ -21,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(BackupTransport::class, RcloneBackupTransport::class);
         TestIsolation::configure($this->app);
     }
 
@@ -42,7 +46,7 @@ class AppServiceProvider extends ServiceProvider
         FilePreviewController::$middleware = ['web', 'auth', EnsureAttachmentUploadAccess::class];
         // Keep the temporary endpoint aligned with the final configurable byte limit.
         config(['livewire.temporary_file_upload.rules.2' => 'max:'.intdiv(config('transactions.attachments.file_bytes'), 1024)]);
-        Password::defaults(fn () => Password::min(12));
+        Password::defaults(fn () => Password::min(12)->rules([new UncommonPassword]));
         Event::listen(Failed::class, fn (Failed $event) => app(AuthenticationFailures::class)
             ->record('password', $event->user instanceof User ? $event->user : null));
     }

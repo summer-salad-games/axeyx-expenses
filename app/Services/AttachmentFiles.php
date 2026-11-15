@@ -112,6 +112,9 @@ class AttachmentFiles
     {
         $this->disk()->makeDirectory('objects');
         $this->assertDirectory();
+        if (disk_free_space($this->disk()->path('')) < $file['size_bytes'] + 268435456) {
+            throw ValidationException::withMessages(['new_attachments' => 'Espace de stockage insuffisant. Contactez un administrateur.']);
+        }
         $stream = fopen($file['source'], 'rb');
         try {
             $this->disk()->put($file['path'], $stream, ['visibility' => 'private']);
@@ -161,7 +164,7 @@ class AttachmentFiles
 
             return true;
         } catch (\Throwable $exception) {
-            // The record is already committed; hourly reconciliation retries orphan cleanup.
+            // The record is already committed; daily reconciliation retries orphan cleanup.
             Log::warning('attachment.cleanup_pending', ['exception' => $exception::class]);
 
             return false;

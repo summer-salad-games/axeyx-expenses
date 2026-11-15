@@ -15,12 +15,19 @@ final class StorageConsistencyLock
     public function run(Closure $operation): mixed
     {
         $disk = Storage::disk('local');
-        $disk->makeDirectory('locks');
-        $path = $disk->path('locks/consistency.lock');
+        $path = config('transactions.storage_lock_path');
+        if (! $path) {
+            $disk->makeDirectory('locks');
+            $path = $disk->path('locks/consistency.lock');
+        } elseif (realpath(dirname($path)) !== dirname($path)) {
+            throw new RuntimeException('The shared storage lock directory must exist without symlinks.');
+        }
         if (is_link($path) || ! ($handle = fopen($path, 'c'))) {
             throw new RuntimeException('Cannot open storage consistency lock.');
         }
-        chmod($path, 0600);
+        if (! function_exists('posix_geteuid') || fileowner($path) === posix_geteuid()) {
+            chmod($path, 0660);
+        }
         $deadline = microtime(true) + 5;
         try {
             do {

@@ -74,8 +74,11 @@ final class TestIsolation
             'session.files' => $root.'/sessions',
             'view.compiled' => $root.'/views',
             'mail.default' => 'array',
+            'backups.workspace' => $root.'/backup-work',
+            'backups.state' => $root.'/backup-state',
+            'transactions.storage_lock_path' => null,
         ]);
-        foreach (['private', 'attachments', 'cache', 'locks', 'sessions', 'views'] as $directory) {
+        foreach (['private', 'attachments', 'cache', 'locks', 'sessions', 'views', 'backup-work', 'backup-state'] as $directory) {
             $path = $root.'/'.$directory;
             if (is_link($path) || (file_exists($path) && realpath($path) !== $path)) {
                 throw new RuntimeException('Test storage directories must not be symlinks.');

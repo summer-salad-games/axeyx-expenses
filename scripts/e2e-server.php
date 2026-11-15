@@ -2,6 +2,7 @@
 
 require dirname(__DIR__).'/vendor/autoload.php';
 
+use App\Operations\Backups\BackupPaths;
 use App\Support\TestIsolation;
 use Illuminate\Contracts\Console\Kernel;
 
@@ -18,7 +19,6 @@ $environment = [
     'APP_DEBUG' => 'false',
     'ARGON_MEMORY' => '1024',
     'ARGON_TIME' => '1',
-    'APP_KEY' => 'base64:'.base64_encode(random_bytes(32)),
     'APP_URL' => 'http://127.0.0.1:8011',
     'DB_DATABASE' => $directory.'/database.sqlite',
     'APP_CONFIG_CACHE' => $directory.'/config.php',
@@ -27,6 +27,14 @@ foreach ($environment as $key => $value) {
     putenv($key.'='.$value);
     $_ENV[$key] = $_SERVER[$key] = $value;
 }
+$environmentPath = BackupPaths::directory($directory.'/environment');
+$temporary = $environmentPath.'/.env-'.BackupPaths::id();
+BackupPaths::write($temporary, 'APP_KEY=base64:'.base64_encode(random_bytes(32))."\n");
+BackupPaths::rename($temporary, $environmentPath.'/.env');
+foreach (['APP_KEY', 'APP_PREVIOUS_KEYS'] as $key) {
+    putenv($key);
+    unset($_ENV[$key], $_SERVER[$key]);
+}
 $app = require $base.'/bootstrap/app.php';
 $kernel = $app->make(Kernel::class);
 if ($kernel->call('migrate:fresh', ['--force' => true]) !== 0) {
@@ -34,6 +42,11 @@ if ($kernel->call('migrate:fresh', ['--force' => true]) !== 0) {
     exit(1);
 }
 require $base.'/tests/Support/seed-e2e.php';
+// The HTTP worker must reload the isolated environment on each request after key rotation.
+foreach (['APP_KEY', 'APP_PREVIOUS_KEYS'] as $key) {
+    putenv($key);
+    unset($_ENV[$key], $_SERVER[$key]);
+}
 chdir($base.'/public');
 pcntl_exec(PHP_BINARY, ['-S', '127.0.0.1:8011', '-t', $base.'/public', $base.'/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php']);
 exit(1);

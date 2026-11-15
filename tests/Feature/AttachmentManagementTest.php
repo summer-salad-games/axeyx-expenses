@@ -104,7 +104,7 @@ class AttachmentManagementTest extends TestCase
         $this->assertMatchesRegularExpression('/\Aobjects\/[a-f0-9]{32}\.'.preg_quote($extension).'\z/', $file->path);
         $this->assertSame(hash_file('sha256', $upload->getRealPath()), $file->sha256);
         $this->assertSame($actor->id, $file->uploaded_by);
-        $this->assertSame(0600, fileperms(Storage::disk('attachments')->path($file->path)) & 0777);
+        $this->assertSame(0640, fileperms(Storage::disk('attachments')->path($file->path)) & 0777);
         $response = $this->get(route('attachments.show', $file));
         $response->assertOk()->assertHeader('Content-Type', AttachmentFiles::TYPES[$extension])->assertHeader('X-Content-Type-Options', 'nosniff');
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));

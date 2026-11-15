@@ -1,0 +1,39 @@
+# Template only. Validate identities, paths and limits during owner-run deployment.
+[Unit]
+Description=ProxyMed verified database and attachment backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=axeyx-backup
+Group=axeyx-backup
+SupplementaryGroups=axeyx-expenses
+WorkingDirectory=/srv/axeyx-expenses/current
+EnvironmentFile=/etc/axeyx-expenses/backup.env
+ExecStartPre=/usr/bin/php scripts/backup-finalize.php
+ExecStart=/usr/bin/php scripts/backup-run.php
+ExecStopPost=/usr/bin/php scripts/backup-finalize.php
+TimeoutStartSec=45min
+TimeoutStopSec=30s
+KillMode=control-group
+UMask=0007
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/srv/axeyx-expenses
+ReadWritePaths=/var/lib/axeyx-expenses/database /var/lib/axeyx-expenses/backup-config /var/lib/axeyx-expenses/backup-work /var/lib/axeyx-expenses/backup-state /var/lib/axeyx-expenses/attachments /var/lib/axeyx-expenses/private /var/lib/axeyx-expenses/coordination
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=1G
+TasksMax=64

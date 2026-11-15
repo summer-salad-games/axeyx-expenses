@@ -16,7 +16,7 @@
 - Enforce SPEC.md's authorization matrix server-side through Policies, Filament strict authorization, Livewire actions and attachment routes.
 - Store transaction magnitudes as positive integer millimes with an explicit expense/revenue type; compute signed net totals using integers; parse decimal strings exactly and format three places with TND. No floats. Apply required SQLite PRAGMAs on every connection, short transactions and bounded lock retries; no network I/O in transactions.
 - Protect server-owned fields, account/MFA state, private files and secrets. CLI passwords use hidden prompts. Record required audit events without credentials or document contents. Preserve file/record consistency and remove files only after commit.
-- Follow the specified coherent SQLite/attachment backup, Google Drive verification/retention, temporary cleanup and SMTP failure-alert design. Never copy a live SQLite database file or archive credentials.
+- Follow the specified coherent SQLite/attachment backup, Google Drive verification/retention, temporary cleanup and local failure-status design. Never copy a live SQLite database file or archive credentials.
 
 ## Verification
 
